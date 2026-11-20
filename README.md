@@ -17,7 +17,7 @@ plugins   weather_fetch ──→ bar.d/10-weather.json ───────┘
 1920×1080/1200, Dracula dark theme.
 
 - **Header** — station name + clock (date + time, colon blinks)
-- **Departure rows** — delayed trains show changed time in orange + planned time
+- **Departure rows** — delayed trains show changed time in orange + planned time; optional platform column (changed platform in orange)
 - **Plugin bar** — filled entirely by plugins writing small JSON files; the bundled weather plugin shows temperature (min/max), UV index, rain probability and a condition icon
 
 ## Quick start
@@ -42,7 +42,7 @@ No API keys are required — DB IRIS and Open-Meteo are public.
 
 | What | Where |
 |------|-------|
-| Station, train filter, delay threshold, coordinates, intervals, brightness, devices, fonts | `bahnhofstafel.conf` (runtime, restart to apply) — all keys in [`bahnhofstafel.conf.example`](bahnhofstafel.conf.example); defaults in `src/config.h` |
+| Station, train filter, delay threshold, platform column (`SHOW_PLATFORM`), coordinates, intervals, brightness, devices, fonts | `bahnhofstafel.conf` (runtime, restart to apply) — all keys in [`bahnhofstafel.conf.example`](bahnhofstafel.conf.example); defaults in `src/config.h` |
 | Pi host, SSH key, extra daemons | `local.mk` or `make` variables |
 | JSON field names shared across programs | `src/schema.h` |
 | Train line colours | `line_colors.json` → [`docs/line-colors.md`](docs/line-colors.md) |

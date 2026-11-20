@@ -30,6 +30,7 @@
 #define COL_TIME   130
 #define COL_CLOCK  150  /* absolute departure time (HH:MM) column */
 #define COL_TRAIN  300  /* fixed slot the (content-width) train pill is centered in */
+#define COL_PLAT   170  /* platform column at the right edge (SHOW_PLATFORM) */
 
 /* weather grid — taller than the header to fit temp/UV/rain stacked in two
  * rows (main value + sub-row) plus the condition icon, while still leaving
@@ -110,6 +111,7 @@ typedef struct {
     lv_obj_t *train_pill;   /* pill container around train_lbl */
     lv_obj_t *train_lbl;
     lv_obj_t *dest_lbl;
+    lv_obj_t *plat_lbl;     /* platform, right column; hidden unless SHOW_PLATFORM */
 } DepartureRow;
 
 static DepartureRow g_rows[MAX_ROWS];
@@ -315,6 +317,14 @@ static void departure_row_render(DepartureRow *row, DepartureInfo info) {
     lv_obj_set_style_text_decor(row->time_lbl,  decor, 0);
     lv_obj_set_style_text_decor(row->clock_lbl, decor, 0);
     lv_obj_set_style_text_decor(row->dest_lbl,  decor, 0);
+
+    /* platform: the changed one in orange if it differs from the plan */
+    int plat_changed = info.changed_platform[0] &&
+                       strcmp(info.changed_platform, info.planned_platform) != 0;
+    const char *plat = plat_changed ? info.changed_platform : info.planned_platform;
+    lv_label_set_text(row->plat_lbl, plat);
+    set_text_color(row->plat_lbl, info.cancelled ? C_DIM : plat_changed ? C_DELAY : C_TEXT);
+    lv_obj_set_style_text_decor(row->plat_lbl, decor, 0);
 }
 
 /* ── departure update ───────────────────────────────────────────────────── */
@@ -512,6 +522,13 @@ static DepartureRow departure_row_create(lv_obj_t *parent, uint32_t bg_color) {
     lv_label_set_long_mode(r.dest_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_obj_set_style_anim_duration(r.dest_lbl, 12000, 0);
 
+    /* platform: fixed-width right column, right-aligned */
+    r.plat_lbl = make_label(r.row, "", font_row, C_TEXT);
+    lv_obj_set_width(r.plat_lbl, COL_PLAT);
+    lv_obj_set_style_text_align(r.plat_lbl, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_pad_right(r.plat_lbl, 30, 0);
+    if (!CFG_I(SHOW_PLATFORM)) lv_obj_add_flag(r.plat_lbl, LV_OBJ_FLAG_HIDDEN);
+
     /* hidden until data arrives */
     lv_obj_set_style_opa(r.row, LV_OPA_TRANSP, 0);
 
@@ -570,6 +587,8 @@ static void init_dummy_data(void) {
     for (int i = 0; i < n; i++) {
         DepartureInfo info = make_dummy_departure(d[i].offset_min, d[i].delay_min,
                                                    d[i].train, d[i].dest, d[i].cancelled);
+        snprintf(info.planned_platform, sizeof(info.planned_platform), "%d", 1 + i % 4);
+        if (i == 2) snprintf(info.changed_platform, sizeof(info.changed_platform), "5");
         departure_row_render(&g_rows[i], info);
     }
     show_rows(n);

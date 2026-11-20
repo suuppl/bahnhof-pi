@@ -37,6 +37,12 @@
 #define DELAY_THRESHOLD_MIN 5
 #endif
 
+/* [runtime] Show the platform at the right edge of each row (1/0); a
+ * changed platform is shown in orange. */
+#ifndef SHOW_PLATFORM
+#define SHOW_PLATFORM 0
+#endif
+
 /* ── Weather (Open-Meteo, keyless) ─────────────────────────────── [runtime] */
 #ifndef OPEN_METEO_URL
 #define OPEN_METEO_URL "https://api.open-meteo.com/v1/forecast"

@@ -16,3 +16,7 @@ local.mk
 !line_colors.example.json
 /bahnhofstafel.conf
 !bahnhofstafel.conf.example
+
+# cross-compilation sysroot, created by `make sysroot` from the Pi
+/sysroot/
+/sysroot.new/

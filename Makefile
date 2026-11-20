@@ -1,5 +1,6 @@
 # Site settings — override on the command line, in a git-ignored local.mk,
 # or in a parent Makefile that sets them before `include`-ing this one.
+SHELL := /bin/bash
 -include local.mk
 PI           ?= dietpi@raspberrypi.local
 SSH_KEY      ?= .ssh/pi_key
@@ -30,12 +31,37 @@ CORE_BINS   := iris_fetch
 PLUGIN_BINS := weather_fetch brightness_ctl presence_ctl
 ALL_BINS    := $(CORE_BINS) $(PLUGIN_BINS) $(EXTRA_BINS)
 
-.PHONY: all build build-native deploy config colors restart clean
+# Cross-compilation sysroot: headers + link libraries copied from the Pi
+# (git-ignored; see docs/sysroot.md). `make build` fetches it if missing.
+SYSROOT             ?= $(abspath $(PUB))/sysroot
+SYSROOT_LIBS        := libcurl libxml2 libcjson libfreetype
+SYSROOT_HEADERS     := usr/include/curl usr/include/aarch64-linux-gnu/curl \
+                       usr/include/libxml2 usr/include/cjson usr/include/freetype2
+SYSROOT_PI_PACKAGES := libcurl4-openssl-dev libxml2-dev libcjson-dev libfreetype-dev
+SYSROOT_REMOTE_ROOT ?= /
+
+.PHONY: all build build-native deploy config colors restart clean sysroot
 
 all: build deploy
 
-build:
-	cmake -S $(SRC_DIR) -B $(BUILD) -DCMAKE_TOOLCHAIN_FILE=$(abspath $(PUB))/aarch64-toolchain.cmake -DCMAKE_BUILD_TYPE=Release $(CMAKE_ARGS)
+# (re)create the sysroot from the Pi; needs the -dev packages installed there.
+# Fetched into sysroot.new first so a failed copy keeps the old one.
+sysroot:
+	rm -rf "$(SYSROOT).new" && mkdir -p "$(SYSROOT).new"
+	set -o pipefail; $(SSH) $(PI) 'cd $(SYSROOT_REMOTE_ROOT) && L=usr/lib/aarch64-linux-gnu; m=; \
+		for l in $(SYSROOT_LIBS); do [ -e $$L/$$l.so ] || m="$$m $$l"; done; \
+		if [ -n "$$m" ]; then echo "missing on the Pi:$$m -- run: sudo apt install $(SYSROOT_PI_PACKAGES)" >&2; exit 1; fi; \
+		tar -czf - $$(for p in $(SYSROOT_HEADERS); do [ -e $$p ] && echo $$p; done) \
+		           $$(for l in $(SYSROOT_LIBS); do ls -d $$L/$$l.so*; done)' \
+		| tar -xzf - -C "$(SYSROOT).new"
+	rm -rf "$(SYSROOT)" && mv "$(SYSROOT).new" "$(SYSROOT)"
+	@echo "sysroot ready: $$(ls $(SYSROOT)/usr/lib/aarch64-linux-gnu | tr '\n' ' ')"
+
+$(SYSROOT)/usr/lib/aarch64-linux-gnu/libcurl.so:
+	$(MAKE) sysroot
+
+build: | $(SYSROOT)/usr/lib/aarch64-linux-gnu/libcurl.so
+	cmake -S $(SRC_DIR) -B $(BUILD) -DCMAKE_TOOLCHAIN_FILE=$(abspath $(PUB))/aarch64-toolchain.cmake -DBAHNHOF_SYSROOT=$(SYSROOT) -DCMAKE_BUILD_TYPE=Release $(CMAKE_ARGS)
 	cmake --build $(BUILD) -j$$(nproc)
 
 build-native:

@@ -1,57 +1,65 @@
 # `sysroot/` — Cross-Compilation Sysroot
 
-A minimal copy of the Raspberry Pi's (aarch64 Debian/DietPi) development headers and shared-library stubs. Used only on the x86-64 build host; never deployed to the Pi.
+The aarch64 headers and shared libraries the cross build links against:
+libcurl, libxml2, cJSON and FreeType. Used only on the build host, never
+deployed. It is **not in git**: `make sysroot` copies it from your own Pi, so
+the versions always match what runs there.
 
-## Why it exists
+## Creating it
 
-Cross-compiling C against system libraries (`libcurl`, `libxml2`, `libcjson`) requires the target architecture's headers and `.so` link stubs. The sysroot provides these without needing a full Pi filesystem.
+```sh
+# once, on the Pi:
+sudo apt install libcurl4-openssl-dev libxml2-dev libcjson-dev libfreetype-dev
+
+# on the build host (uses PI / SSH_KEY from local.mk, like make deploy):
+make sysroot
+```
+
+`make build` runs `make sysroot` automatically when `sysroot/` is missing.
+Run it again after upgrading those libraries on the Pi. The copy goes to
+`sysroot.new/` first, so a failed fetch keeps the old sysroot. If a `-dev`
+package is missing on the Pi, it stops with the `apt install` command to run.
 
 ## Structure
 
+A mirror of the relevant parts of the Pi's `/usr`:
+
 ```
 sysroot/
-├── include/          # Header files copied from the Pi
-│   ├── curl/         # libcurl headers
-│   ├── libxml2/      # libxml2 headers
-│   ├── cjson/        # cJSON headers
-│   └── freetype2/    # FreeType headers
-├── lib/
-│   └── aarch64-linux-gnu/   # libcurl, libxml2, libcjson, libfreetype .so only
-└── LICENSES/         # license texts for the above (see README.md there)
+└── usr/
+    ├── include/
+    │   ├── aarch64-linux-gnu/curl/   # libcurl headers (Debian multiarch path)
+    │   ├── libxml2/
+    │   ├── cjson/
+    │   └── freetype2/
+    └── lib/aarch64-linux-gnu/
+        └── lib{curl,xml2,cjson,freetype}.so*
 ```
 
-Only the four libraries the programs link directly are included. Their
-transitive dependencies (OpenSSL, zlib, nghttp2, …) are not needed at link
-time (`-Wl,--allow-shlib-undefined`) and come from the Pi at runtime. When
-adding a library, also add its license to `LICENSES/` and `THIRD_PARTY.md`.
+Nothing else is needed: the transitive dependencies (OpenSSL, zlib, nghttp2,
+…) are not required at link time (`-Wl,--allow-shlib-undefined` in the
+toolchain file) and come from the Pi at runtime. The sysroot has no libc
+headers, so it can't shadow the cross compiler's own.
 
 ## How it is used
 
-`aarch64-toolchain.cmake` sets:
+`aarch64-toolchain.cmake` sets `CROSS_INCLUDE_DIRS` (the include dirs above)
+and `CROSS_LIB_DIR` (`sysroot/usr/lib/aarch64-linux-gnu`); `CMakeLists.txt`
+passes them to `find_library()` and `target_include_directories()`. It fails
+early with a hint if the sysroot is missing.
 
-```cmake
-set(CROSS_INCLUDE_DIRS
-    "${SYSROOT}/include"
-    "${SYSROOT}/include/libxml2"
-    "${SYSROOT}/include/curl"
-    "${SYSROOT}/include/cjson"
-    …)
-set(CROSS_LIB_DIR "${SYSROOT}/lib/aarch64-linux-gnu")
-```
+## Without a Pi at hand
 
-`CMakeLists.txt` reads these variables and passes them to `find_library()` and `target_include_directories()`.
+Any directory with the same layout works: `make build SYSROOT=/path/to/sysroot`. For example,
+extract the arm64 Debian packages (`libcurl4-openssl-dev`, `libcurl4`,
+`libxml2-dev`, `libxml2`, `libcjson-dev`, `libcjson1`, `libfreetype-dev`,
+`libfreetype6`) with `dpkg -x <pkg>.deb /path/to/sysroot`. Use the same
+Debian release as the Pi.
 
-## Transitive dependencies
+## glibc compatibility
 
-The linker flag `-Wl,--allow-shlib-undefined` is set in the toolchain file. This allows linking to succeed even when transitive `.so` dependencies (e.g. `libssl` needed by `libcurl`) are absent from the local sysroot — they exist on the Pi at runtime.
-
-## Updating the sysroot
-
-Copy updated headers/stubs from the Pi:
-
-```sh
-rsync -av --include='*.h' --include='*.so*' --include='*/' --exclude='*' \
-    pi:/usr/include/curl/ sysroot/include/curl/
-rsync -av pi:/usr/lib/aarch64-linux-gnu/libcurl.so* sysroot/lib/aarch64-linux-gnu/
-# repeat for libxml2, libcjson, etc.
-```
+The C library comes from the cross compiler (`gcc-aarch64-linux-gnu`), not
+from the sysroot. If the build host's distribution ships a newer glibc than
+the Pi, binaries may fail on the Pi with `GLIBC_2.xx not found`; then build
+on a host with the Pi's Debian release (e.g. in a container) or natively on
+the Pi (`make build-native`).

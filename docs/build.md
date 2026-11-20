@@ -40,4 +40,4 @@ Uses system `find_package` for dependencies. Useful for catching compile errors 
 
 - `aarch64-linux-gnu-gcc` (from `gcc-aarch64-linux-gnu` package)
 - `cmake` ≥ 3.16
-- No target libraries needed on host — they come from `sysroot/`
+- No target libraries needed on host — they come from `sysroot/`, copied from the Pi by `make sysroot`

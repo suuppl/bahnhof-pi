@@ -15,6 +15,12 @@ endif()
 if(CROSS_LIB_DIR)
     # -- cross-compilation path --
     set(INC_DIRS ${CROSS_INCLUDE_DIRS})
+    # re-resolve on every configure so a changed sysroot (path or layout)
+    # never leaves stale library paths in an existing build/ cache
+    unset(CURL_LIB CACHE)
+    unset(XML2_LIB CACHE)
+    unset(CJSON_LIB CACHE)
+    unset(FREETYPE_LIB CACHE)
     find_library(CURL_LIB      NAMES curl      PATHS ${CROSS_LIB_DIR} NO_DEFAULT_PATH REQUIRED)
     find_library(XML2_LIB      NAMES xml2      PATHS ${CROSS_LIB_DIR} NO_DEFAULT_PATH REQUIRED)
     find_library(CJSON_LIB     NAMES cjson     PATHS ${CROSS_LIB_DIR} NO_DEFAULT_PATH REQUIRED)

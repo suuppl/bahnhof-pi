@@ -41,7 +41,7 @@ Defines four executables plus the `bahnhof_common` helper library (for out-of-tr
 
 Has two build paths controlled by whether `CROSS_LIB_DIR` is set (injected by the toolchain file):
 
-- **Cross-compile** (`CROSS_LIB_DIR` set): searches libraries in `sysroot/lib/aarch64-linux-gnu`, skips `find_package`.
+- **Cross-compile** (`CROSS_LIB_DIR` set): searches libraries in `sysroot/usr/lib/aarch64-linux-gnu`, skips `find_package`.
 - **Native**: uses `find_package(CURL)`, `find_package(LibXml2)`, `pkg-config` fallback.
 
 ---
@@ -101,7 +101,7 @@ Placeholder for a future local secrets file. Currently unused — no daemon requ
 | `systemd/` | Service unit, `start.sh`, hotkey config | — |
 | `fonts/` | Runtime fonts deployed to Pi (`DejaVuSans`, `Twemoji.Mozilla.ttf`) | — |
 | `lvgl/` | LVGL graphics library (git submodule, v9.x) | [lvgl.md](lvgl.md) |
-| `sysroot/` | Raspberry Pi headers + library stubs for cross-compilation | [sysroot.md](sysroot.md) |
+| `sysroot/` | Pi headers + link libraries for cross-compilation — not in git, created by `make sysroot` | [sysroot.md](sysroot.md) |
 | `build/` | CMake build output (generated, not in version control) | [build.md](build.md) |
 | `.ssh/` | SSH key for Pi access (not in version control) | [ssh.md](ssh.md) |
 

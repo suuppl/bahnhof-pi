@@ -33,7 +33,10 @@ cp bahnhofstafel.conf.example bahnhofstafel.conf
 # your Pi (git-ignored)
 echo 'PI := dietpi@raspberrypi.local' > local.mk
 
-make            # cross-compile + deploy + restart
+# once, on the Pi: the libraries the cross build links against
+#   sudo apt install libcurl4-openssl-dev libxml2-dev libcjson-dev libfreetype-dev
+
+make            # copy sysroot from the Pi (first time) + cross-compile + deploy + restart
 ```
 
 No API keys are required — DB IRIS and Open-Meteo are public.
@@ -60,6 +63,7 @@ No API keys are required — DB IRIS and Open-Meteo are public.
 | Target | Action |
 |--------|--------|
 | `make` / `make all` | Cross-compile + deploy + restart |
+| `make sysroot` | Copy the cross-compile headers/libs from the Pi ([docs/sysroot.md](docs/sysroot.md)) |
 | `make build` | Cross-compile only (into `build/`) |
 | `make build-native` | Native build (compile check) |
 | `make deploy` | Build, push binaries + service, restart |
@@ -77,13 +81,13 @@ Logs on the Pi: `~/bahnhofstafel/log/*.log`
 - [`docs/plugins.md`](docs/plugins.md) — site config, bar plugins, embedding in a private repo
 - [`docs/line-colors.md`](docs/line-colors.md) — train line colours
 - [`docs/lvgl.md`](docs/lvgl.md) — LVGL submodule and `lv_conf.h` settings
-- [`docs/sysroot.md`](docs/sysroot.md) — cross-compilation sysroot structure
+- [`docs/sysroot.md`](docs/sysroot.md) — cross-compilation sysroot (`make sysroot` from the Pi)
 - [`docs/build.md`](docs/build.md) — CMake build output
 - [`docs/ssh.md`](docs/ssh.md) — SSH key setup
 
 ## License
 
 The project's own code is public domain ([The Unlicense](LICENSE)). Bundled
-fonts, the LVGL submodule and the cross-compilation `sysroot/` libraries
-keep their own licenses (OFL 1.1, CC-BY 4.0 / Apache-2.0, MIT, curl, FTL);
+fonts and the LVGL submodule keep their own licenses (OFL 1.1, CC-BY 4.0 /
+Apache-2.0, MIT);
 see [`THIRD_PARTY.md`](THIRD_PARTY.md) for details and required attributions.

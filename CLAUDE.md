@@ -39,13 +39,14 @@ The HDMI monitor has no `/sys/class/backlight`; brightness is the monitor's own 
 
 ```sh
 make          # cross-compile all binaries + deploy to Pi + restart
+make sysroot  # copy the cross-compile headers/libs from the Pi (once / after upgrades)
 make build    # cross-compile only (into build/)
 make deploy   # build, push binaries and restart
 make restart  # restart bahnhofstafel.service on Pi without rebuilding
 make clean    # delete build/ and build-native/
 ```
 
-Cross-compilation uses `aarch64-toolchain.cmake` with `aarch64-linux-gnu-gcc` and headers/library stubs from `sysroot/`. `CMakeLists.txt` also supports a **native build** (omit the toolchain flag) using system `find_package`/`pkg-config` — useful for checking compilation errors without the Pi:
+Cross-compilation uses `aarch64-toolchain.cmake` with `aarch64-linux-gnu-gcc` and headers/libraries from `sysroot/` (git-ignored; `make sysroot` copies libcurl/libxml2/libcjson/libfreetype from the Pi over SSH, `make build` does it if missing; see `docs/sysroot.md`). `CMakeLists.txt` also supports a **native build** (omit the toolchain flag) using system `find_package`/`pkg-config` — useful for checking compilation errors without the Pi:
 
 ```sh
 cmake -B build-native && cmake --build build-native -j$(nproc)

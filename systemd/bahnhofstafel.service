@@ -19,6 +19,7 @@ ExecStop=-/usr/bin/pkill -9 -x bahnhofstafel
 ExecStop=-/usr/bin/pkill -9 -x iris_fetch
 ExecStop=-/usr/bin/pkill -9 -x weather_fetch
 ExecStop=-/usr/bin/pkill -9 -x brightness_ctl
+ExecStop=-/usr/bin/pkill -9 -x presence_ctl
 KillMode=control-group
 TimeoutStartSec=30
 

@@ -93,7 +93,7 @@
 #define FB_DEVICE      "/dev/fb0"
 #endif
 
-/* ── Screen brightness (brightness_ctl, DDC/CI over HDMI I2C) ──── [runtime]
+/* ── Screen brightness (brightness_ctl plugin, DDC/CI over HDMI I2C) [runtime]
  * Raw writes, no readback (ddcutil verify-reads are unreliable on the Pi).
  * Smooth day/night curve around sunrise/sunset from weather.json. */
 #ifndef BRIGHT_DAY_PCT
@@ -124,7 +124,7 @@
 #define VCP_BRIGHTNESS         0x10  /* MCCS brightness feature */
 #endif
 
-/* ── Presence sensor (DFRobot C4001 mmWave, UART) ──────────────── [runtime] */
+/* ── Presence sensor (presence_ctl plugin, DFRobot C4001, UART) ─ [runtime] */
 #ifndef PRESENCE_DEVICE
 #define PRESENCE_DEVICE    "/dev/ttyAMA0"
 #endif
@@ -138,11 +138,13 @@
 #define DATA_DIR         "/run/bahnhofstafel"
 #define DEPARTURES_JSON  DATA_DIR "/departures.json"
 #define WEATHER_JSON     DATA_DIR "/weather.json"
-#define PRESENCE_JSON    DATA_DIR "/presence.json"
 /* Bottom-bar plugins: every *.json in here contributes groups, in filename
  * order (see docs/plugins.md). weather_fetch writes 10-weather.json. */
 #define BAR_DIR          DATA_DIR "/bar.d"
 #define BAR_WEATHER_JSON BAR_DIR "/10-weather.json"
+/* Screen on/off requests from plugins (screen.h): screen is on unless some
+ * file in here says {"on": false}. presence_ctl writes 50-presence.json. */
+#define SCREEN_DIR       DATA_DIR "/screen.d"
 
 #define MAX_DEPARTURES  120
 #define MAX_ROWS        16   /* max departure rows the display can show */

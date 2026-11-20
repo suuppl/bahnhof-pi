@@ -21,6 +21,7 @@
 #include "schema.h"
 #include "departure_info.h"
 #include "fileio.h"
+#include "screen.h"
 
 /* ── layout constants ───────────────────────────────────────────────────── */
 
@@ -116,12 +117,11 @@ static DepartureRow g_rows[MAX_ROWS];
 static int g_row_count = 0;
 static int g_max_rows  = MAX_ROWS;  /* capped after layout to whole rows only */
 static int g_has_real_data    = 0;
-static int g_presence         = -1;   /* -1 = unknown, 0 = away, 1 = present */
+static int g_screen_on        = -1;   /* -1 = unknown, 0 = blanked, 1 = on */
 
 /* ── file-change detection ──────────────────────────────────────────────── */
 
 static time_t g_dep_mtime  = 0;
-static time_t g_prs_mtime  = 0;
 
 static time_t file_mtime(const char *path) {
     struct stat st;
@@ -365,22 +365,13 @@ static void fb_blank(int blank) {
     close(fd);
 }
 
-static void presence_poll_cb(lv_timer_t *t) {
+/* Blank/unblank the framebuffer as the screen.d plugins request (screen.h). */
+static void screen_poll_cb(lv_timer_t *t) {
     (void)t;
-    time_t mt = file_mtime(PRESENCE_JSON);
-    if (mt == 0 || mt == g_prs_mtime) return;
-    g_prs_mtime = mt;
-    char *raw = read_file(PRESENCE_JSON);
-    if (!raw) return;
-    cJSON *root = cJSON_Parse(raw);
-    free(raw);
-    if (!root) return;
-    int present = (int)cJSON_GetNumberValue(cJSON_GetObjectItem(root, "present"));
-    cJSON_Delete(root);
-    if (present == g_presence) return;
-    g_presence = present;
-
-    if (present) {
+    int on = screen_wanted_on();
+    if (on == g_screen_on) return;
+    g_screen_on = on;
+    if (on) {
         fb_blank(0);
         lv_obj_invalidate(lv_screen_active());
     } else {
@@ -926,7 +917,7 @@ void display_init(void) {
     lv_timer_create(clock_cb,        1000,             NULL);
     lv_timer_create(dep_poll_cb,     CFG_I(DEP_POLL_MS),      NULL);
     lv_timer_create(bar_poll_cb,     CFG_I(BAR_POLL_MS),      NULL);
-    lv_timer_create(presence_poll_cb, 1000,            NULL);
+    lv_timer_create(screen_poll_cb,  1000,             NULL);
 
     /* Compute how many complete rows fit in the list area.
      * Force a layout pass so heights are resolved, then divide available

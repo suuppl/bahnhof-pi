@@ -1,14 +1,16 @@
 # Bahnhofstafel Pi
 
-A Raspberry Pi departure board for any Deutsche Bahn station. Four cooperating C programs render live train departures and weather on the Pi's framebuffer (`/dev/fb0`) using LVGL.
+A Raspberry Pi departure board for any Deutsche Bahn station. A small core (departure fetcher + display) and optional plugins render live train departures, weather and more on the Pi's framebuffer (`/dev/fb0`) using LVGL.
 
 ```
-iris_fetch    →  /run/bahnhofstafel/departures.json  ─┐
-weather_fetch →  /run/bahnhofstafel/weather.json     ─┼→  bahnhofstafel (LVGL display)
-weather_fetch →  /run/bahnhofstafel/bar.d/10-weather.json (sample bar plugin)
-(your plugin  →  /run/bahnhofstafel/bar.d/NN-name.json)─┤
-                                                      └→  brightness_ctl (HDMI backlight via DDC/CI)
+core      iris_fetch ─────→ departures.json ──────────→ bahnhofstafel (LVGL display)
+                                                          ▲ bottom bar   ▲ blank/unblank
+plugins   weather_fetch ──→ bar.d/10-weather.json ───────┘              │
+                       └──→ weather.json (sunrise/sunset) ─→ brightness_ctl → monitor backlight (DDC/CI)
+          presence_ctl ───→ screen.d/50-presence.json ───────────────────┘   (also pauses brightness_ctl)
+          your plugin ────→ bar.d/NN-name.json  /  screen.d/NN-name.json
 ```
+(all files under `/run/bahnhofstafel/`; `PLUGINS` in `bahnhofstafel.conf` picks which plugins start)
 
 ## Display
 
@@ -44,13 +46,14 @@ No API keys are required — DB IRIS and Open-Meteo are public.
 | Pi host, SSH key, extra daemons | `local.mk` or `make` variables |
 | JSON field names shared across programs | `src/schema.h` |
 | Train line colours | `line_colors.json` → [`docs/line-colors.md`](docs/line-colors.md) |
-| Bottom bar contents (plugins) | [`docs/plugins.md`](docs/plugins.md) |
+| Plugins to start (`PLUGINS`) | `bahnhofstafel.conf` |
+| Bottom bar / screen plugins | [`docs/plugins.md`](docs/plugins.md) |
 
 ## Hardware
 
 - Raspberry Pi (aarch64, DietPi/Debian)
-- HDMI monitor with DDC/CI brightness on `/dev/i2c-2` (optional)
-- DFRobot C4001 mmWave presence sensor on UART (optional)
+- HDMI monitor with DDC/CI brightness on `/dev/i2c-2` (optional, `brightness_ctl` plugin)
+- DFRobot C4001 mmWave presence sensor on UART (optional, `presence_ctl` plugin)
 
 ## Makefile targets
 

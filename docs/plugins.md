@@ -1,11 +1,24 @@
-# Bottom-bar plugins, site config, and embedding
+# Plugins, site config, and embedding
 
-The bottom strip of the display is owned entirely by **plugins**: small
-programs that write a JSON file into `/run/bahnhofstafel/bar.d/`. The
-display knows nothing about weather, solar, or anything else. It just draws
-whatever groups the files contain.
+The core is just `iris_fetch` (departures) and the display. Everything else
+is a **plugin**: a small daemon that talks to the display through files in
+`/run/bahnhofstafel/`:
 
-`weather_fetch` is the bundled sample plugin.
+| Interface | Directory | Bundled plugin |
+|-----------|-----------|----------------|
+| Bottom bar groups | `bar.d/NN-name.json` | `weather_fetch` |
+| Screen on/off | `screen.d/NN-name.json` | `presence_ctl` |
+| (none, drives hardware directly) | | `brightness_ctl` (DDC/CI backlight) |
+
+Which plugins start is a runtime setting:
+
+```sh
+# bahnhofstafel.conf — default: all bundled plugins + EXTRA_BINS
+PLUGINS="weather_fetch brightness_ctl presence_ctl"
+```
+
+`start.sh` clears `bar.d/` and `screen.d/` on every (re)start, so groups and
+requests of plugins you removed disappear.
 
 ## Plugin files — `bar.d/NN-name.json`
 
@@ -76,6 +89,26 @@ echo '{"groups":[{"emoji":"🌡","value":"19°","width":170}]}' > /run/bahnhofst
   && mv /run/bahnhofstafel/bar.d/.tmp /run/bahnhofstafel/bar.d/60-room.json
 ```
 
+## Screen plugins — `screen.d/NN-name.json`
+
+```json
+{ "on": false }
+```
+
+The screen is **on unless at least one** file in `screen.d/` says
+`"on": false`. Several plugins can combine this way (presence, a night
+schedule, a manual switch). C plugins use `screen_request("60-night", 0)` from
+`src/screen.h`; the display blanks the framebuffer (`FBIOBLANK`) and
+`brightness_ctl` pauses while the screen is off.
+
+`presence_ctl` is the sample: a DFRobot C4001 mmWave radar on
+`PRESENCE_DEVICE` turns the screen off after `PRESENCE_TIMEOUT_S` seconds
+without presence. Without the sensor it exits and the screen stays on.
+
+`brightness_ctl` sets the monitor backlight over DDC/CI on a sunrise/sunset
+curve (`BRIGHT_*` settings). It reads `weather.json` when the weather plugin
+runs, otherwise it uses fixed fallback hours.
+
 ## Site settings — `bahnhofstafel.conf`
 
 Everything site-specific is a **runtime setting**: `KEY=value` lines in
@@ -141,5 +174,7 @@ include public/Makefile
 ```
 
 `make deploy` copies `EXTRA_BINS` to the Pi and writes their names to
-`~/bahnhofstafel/extra_daemons`; `start.sh` starts each one with its own log
-file.
+`~/bahnhofstafel/extra_daemons`. `start.sh` starts them along with the
+bundled plugins unless `PLUGINS` is set, in which case only the listed ones
+run (`PLUGINS="weather_fetch my_plugin"`). Each plugin logs to
+`log/<name>.log`.

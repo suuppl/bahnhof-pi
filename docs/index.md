@@ -1,14 +1,17 @@
 # Bahnhofstafel — Project Overview
 
 A Raspberry Pi departure board (Bahnhofstafel) for a Deutsche Bahn station of your choice.
-Four cooperating C programs render a live train/weather display on the Pi's framebuffer (`/dev/fb0`) via LVGL.
+A core (departure fetcher + display) and optional plugins render a live train/weather display on the Pi's framebuffer (`/dev/fb0`) via LVGL.
 
 ```
-iris_fetch    →  /run/bahnhofstafel/departures.json  ─┐
-weather_fetch →  /run/bahnhofstafel/weather.json     ─┼→  bahnhofstafel (LVGL display)
-              →  /run/bahnhofstafel/bar.d/*.json     ─┤   (bottom-bar plugins, see plugins.md)
-                                                      └→  brightness_ctl (HDMI backlight via DDC/CI)
+core      iris_fetch ─────→ departures.json ──────────→ bahnhofstafel (LVGL display)
+                                                          ▲ bottom bar   ▲ blank/unblank
+plugins   weather_fetch ──→ bar.d/10-weather.json ───────┘              │
+                       └──→ weather.json (sunrise/sunset) ─→ brightness_ctl → monitor backlight (DDC/CI)
+          presence_ctl ───→ screen.d/50-presence.json ───────────────────┘   (also pauses brightness_ctl)
+          your plugin ────→ bar.d/NN-name.json  /  screen.d/NN-name.json
 ```
+(all files under `/run/bahnhofstafel/`; `PLUGINS` in `bahnhofstafel.conf` picks which plugins start)
 
 All JSON writes are atomic (`write_atomic()` in `src/fileio.c`: write to `{dest}.tmp.PID` then `rename()`), so readers never see a partial file.
 
@@ -32,7 +35,8 @@ Defines four executables plus the `bahnhof_common` helper library (for out-of-tr
 
 - **`iris_fetch`** — links `libcurl`, `libxml2`, `libcjson`, `libm`; sources include shared `http.c`, `fileio.c`
 - **`weather_fetch`** — links `libcurl`, `libcjson`; sources include shared `http.c`, `fileio.c`
-- **`brightness_ctl`** — links `libcjson`; sources include `brightness_curve.c`
+- **`brightness_ctl`** (plugin) — links `libcjson`; sources include `brightness_curve.c`, `screen.c`
+- **`presence_ctl`** (plugin) — links `libcjson`; sources include `screen.c`
 - **`bahnhofstafel`** — links `lvgl` (as CMake subdirectory), `libcjson`, `libfreetype`, `libm`
 
 Has two build paths controlled by whether `CROSS_LIB_DIR` is set (injected by the toolchain file):
@@ -108,7 +112,7 @@ Placeholder for a future local secrets file. Currently unused — no daemon requ
 | File | Purpose |
 |------|---------|
 | `bahnhofstafel.service` | systemd unit (oneshot + RemainAfterExit, autostarts on boot) |
-| `start.sh` | Launch script: sources `.env`, kills old processes, starts the four daemons plus any listed in `extra_daemons` |
+| `start.sh` | Launch script: sources `.env`, kills old processes, starts `iris_fetch`, the display and the `PLUGINS` from `bahnhofstafel.conf` (default: bundled plugins + `extra_daemons`) |
 | `bahnhofstafel-hotkeys.conf` | triggerhappy config: Ctrl+Alt+S stops, Ctrl+Alt+R restarts |
 | `triggerhappy-override.conf` | systemd drop-in to allow triggerhappy to call `systemctl` |
 

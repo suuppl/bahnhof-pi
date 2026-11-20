@@ -4,6 +4,9 @@
 # Keys are the macro names from src/config.h; anything not set here keeps
 # its compiled-in default. Environment variables override this file.
 
+# ── Plugins to start (default: all bundled + EXTRA_BINS of an embedding repo) ─
+#PLUGINS="weather_fetch brightness_ctl presence_ctl"
+
 # ── Station ────────────────────────────────────────────────────────────────
 STATION_NAME="Berlin Hbf"          # IRIS station name, looked up at startup
 #STATION_EVA_FALLBACK=0            # only if the lookup fails and nothing is cached

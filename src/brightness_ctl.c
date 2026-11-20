@@ -1,8 +1,9 @@
 /*
  * brightness_ctl — sets the HDMI monitor backlight via DDC/CI (MCCS VCP 0x10)
- * over the I2C bus, following a sunrise/sunset curve read from weather.json.
- * Turns the screen off after PRESENCE_TIMEOUT_S seconds without a presence
- * detection from the C4001 mmWave radar on PRESENCE_DEVICE (UART, $DFHPD).
+ * over the I2C bus, following a sunrise/sunset curve read from weather.json
+ * (fixed fallback hours without the weather plugin). Optional plugin; while
+ * another plugin has the screen off (screen.h) it pauses, and re-applies the
+ * level when the screen comes back on.
  *
  * DDC/CI "Set VCP Feature" is a write-only I2C transaction; we never read back.
  * The vc4 HDMI I2C read channel on this Pi is unreliable (ddcutil's verify-read
@@ -14,7 +15,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
-#include <termios.h>
 #include <sys/ioctl.h>
 #include <cjson/cJSON.h>
 #include "config.h"
@@ -22,6 +22,7 @@
 #include "schema.h"
 #include "brightness_curve.h"
 #include "fileio.h"
+#include "screen.h"
 
 #ifndef I2C_SLAVE_FORCE
 #define I2C_SLAVE_FORCE 0x0706   /* from <linux/i2c-dev.h>; defined here to avoid the dep */
@@ -77,67 +78,12 @@ static void fallback_sun_times(time_t now, time_t *sr, time_t *ss) {
     *ss = mktime(&t);
 }
 
-/* Write presence state to presence.json atomically so the display can poll it. */
-static void write_presence_json(int present) {
-    char tmp[128];
-    snprintf(tmp, sizeof(tmp), "%s.tmp", PRESENCE_JSON);
-    FILE *f = fopen(tmp, "w");
-    if (!f) return;
-    fprintf(f, "{\"present\":%d}\n", present);
-    fclose(f);
-    rename(tmp, PRESENCE_JSON);
-}
-
-/* Open the presence sensor UART in raw non-blocking mode. Returns fd or -1. */
-static int open_presence_uart(void) {
-    int fd = open(CFG_S(PRESENCE_DEVICE), O_RDONLY | O_NOCTTY | O_NONBLOCK);
-    if (fd < 0) return -1;
-    struct termios tty = {0};
-    cfsetspeed(&tty, B9600);
-    tty.c_cflag = CS8 | CREAD | CLOCAL;
-    tty.c_iflag = IGNPAR;
-    tty.c_cc[VMIN]  = 0;
-    tty.c_cc[VTIME] = 0;
-    tcsetattr(fd, TCSANOW, &tty);
-    return fd;
-}
-
-/*
- * Drain all available bytes from the presence UART.
- * Updates *last_seen whenever a $DFHPD sentence with state=1 is received.
- */
-static void drain_presence(int fd, time_t *last_seen) {
-    static char buf[128];
-    static int  len = 0;
-    char ch;
-    while (read(fd, &ch, 1) == 1) {
-        if (ch == '\n') {
-            buf[len] = '\0';
-            if (strncmp(buf, "$DFHPD,1", 8) == 0)
-                *last_seen = time(NULL);
-            len = 0;
-        } else if (ch != '\r' && len < (int)sizeof(buf) - 1) {
-            buf[len++] = ch;
-        }
-    }
-}
-
 int main(void) {
-    int uart_fd = open_presence_uart();
-    if (uart_fd < 0)
-        fprintf(stderr, "brightness_ctl: cannot open %s — presence detection disabled\n",
-                CFG_S(PRESENCE_DEVICE));
-
-    time_t last_seen      = time(NULL);   /* assume presence at startup */
     time_t last_sun_update = 0;
     time_t sr = 0, ss = 0;
-    int last_pct     = -1;
-    int last_present = -1;
+    int last_pct = -1;
 
     for (;;) {
-        if (uart_fd >= 0)
-            drain_presence(uart_fd, &last_seen);
-
         time_t now = time(NULL);
 
         /* Refresh sun times every BRIGHT_INTERVAL_S seconds. */
@@ -147,16 +93,9 @@ int main(void) {
             last_sun_update = now;
         }
 
-        int present = (now - last_seen) <= CFG_I(PRESENCE_TIMEOUT_S);
-        if (present != last_present) {
-            write_presence_json(present);
-            last_present = present;
-        }
-
-        /* Apply DDC brightness curve while someone is present.
-         * Blanking/unblanking is handled by the display process via FBIOBLANK
-         * so it can sequence the redraw immediately after wake. */
-        if (present) {
+        /* Apply the curve while the screen is on. Blanking itself is done by
+         * the display (FBIOBLANK) from screen.d requests. */
+        if (screen_wanted_on()) {
             int pct = brightness_curve(now, sr, ss);
             if (pct != last_pct) {
                 if (ddc_set_brightness(pct) == 0) {

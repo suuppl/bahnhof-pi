@@ -20,6 +20,9 @@
  * { "groups": [ { "emoji": "🌡", "value": "21°", "width": 170,
  *                 "sub": [ { "arrow": "↓", "value": "14°", "width": 90 } ] },
  *               { "icon": "⛅", "align": "right" } ] } */
+/* screen.d/NN-name.json — screen on/off requests (screen.h) */
+#define SCR_ON            "on"      /* false = this plugin wants the screen off */
+
 #define BAR_GROUPS        "groups"
 #define BAR_EMOJI         "emoji"   /* small glyph left of the value */
 #define BAR_VALUE         "value"   /* pre-formatted text */

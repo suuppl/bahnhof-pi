@@ -45,7 +45,7 @@ endif()
 
 # Exported so a parent project (add_subdirectory) can build extra fetchers
 # against the shared helpers: target_link_libraries(x PRIVATE bahnhof_common)
-add_library(bahnhof_common STATIC src/http.c src/fileio.c src/settings.c)
+add_library(bahnhof_common STATIC src/http.c src/fileio.c src/settings.c src/screen.c)
 target_link_libraries(bahnhof_common PUBLIC ${EXT_LIBS})
 target_include_directories(bahnhof_common PUBLIC src ${INC_DIRS})
 if(CROSS_LIB_DIR)
@@ -67,7 +67,7 @@ if(CROSS_LIB_DIR)
     target_link_directories(iris_fetch PRIVATE ${CROSS_LIB_DIR})
 endif()
 
-# ── weather_fetch ─────────────────────────────────────────────────────────
+# ── weather_fetch (plugin: weather bar + sunrise/sunset) ─────────────────────────────────────────────────────────
 
 add_executable(weather_fetch src/weather_fetch.c src/http.c src/fileio.c src/weather_info.c src/settings.c)
 target_include_directories(weather_fetch PRIVATE src ${INC_DIRS})
@@ -76,18 +76,27 @@ if(CROSS_LIB_DIR)
     target_link_directories(weather_fetch PRIVATE ${CROSS_LIB_DIR})
 endif()
 
-# ── brightness_ctl ────────────────────────────────────────────────────────
+# ── brightness_ctl (plugin: DDC/CI backlight curve) ────────────────────────────────────────────────────────
 
-add_executable(brightness_ctl src/brightness_ctl.c src/brightness_curve.c src/fileio.c src/settings.c)
+add_executable(brightness_ctl src/brightness_ctl.c src/brightness_curve.c src/fileio.c src/settings.c src/screen.c)
 target_include_directories(brightness_ctl PRIVATE src ${INC_DIRS})
 target_link_libraries(brightness_ctl PRIVATE ${CJSON_LIB})
 if(CROSS_LIB_DIR)
     target_link_directories(brightness_ctl PRIVATE ${CROSS_LIB_DIR})
 endif()
 
+# ── presence_ctl (plugin: radar → screen on/off) ──────────────────────────
+
+add_executable(presence_ctl src/presence_ctl.c src/fileio.c src/settings.c src/screen.c)
+target_include_directories(presence_ctl PRIVATE src ${INC_DIRS})
+target_link_libraries(presence_ctl PRIVATE ${CJSON_LIB})
+if(CROSS_LIB_DIR)
+    target_link_directories(presence_ctl PRIVATE ${CROSS_LIB_DIR})
+endif()
+
 # ── bahnhofstafel (display) ───────────────────────────────────────────────
 
-add_executable(bahnhofstafel src/main.c src/display.c src/departure_info.c src/fileio.c src/settings.c)
+add_executable(bahnhofstafel src/main.c src/display.c src/departure_info.c src/fileio.c src/settings.c src/screen.c)
 target_include_directories(bahnhofstafel PRIVATE src ${CMAKE_CURRENT_SOURCE_DIR} ${INC_DIRS})
 target_link_libraries(bahnhofstafel PRIVATE lvgl ${CJSON_LIB} ${FREETYPE_LIB} m)
 if(CROSS_LIB_DIR)

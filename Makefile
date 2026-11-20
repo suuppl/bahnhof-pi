@@ -23,8 +23,12 @@ SSH          := ssh -i $(SSH_KEY) -o StrictHostKeyChecking=no -o ConnectTimeout=
 PI_USER      := $(firstword $(subst @, ,$(PI)))
 REMOTE       := ~/$(APP_DIR)/bin
 
-CORE_BINS := iris_fetch weather_fetch brightness_ctl
-ALL_BINS  := $(CORE_BINS) $(EXTRA_BINS)
+# core = iris_fetch + display (bahnhofstafel, deployed separately below);
+# bundled plugins are always deployed, PLUGINS in bahnhofstafel.conf picks
+# which ones start.
+CORE_BINS   := iris_fetch
+PLUGIN_BINS := weather_fetch brightness_ctl presence_ctl
+ALL_BINS    := $(CORE_BINS) $(PLUGIN_BINS) $(EXTRA_BINS)
 
 .PHONY: all build build-native deploy config colors restart clean
 

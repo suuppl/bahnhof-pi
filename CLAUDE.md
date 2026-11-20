@@ -4,19 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture
 
-Four cooperating C programs run on the Pi and communicate via JSON files on tmpfs:
+A core (`iris_fetch` + display) and optional plugin daemons run on the Pi and communicate via JSON files on tmpfs:
 
 ```
-iris_fetch    →  /run/bahnhofstafel/departures.json  ─┐
-weather_fetch →  /run/bahnhofstafel/weather.json     ─┼→  bahnhofstafel (LVGL display)
-             →  /run/bahnhofstafel/bar.d/*.json      ─┤   (bar plugins; weather_fetch writes 10-weather.json)
-                                                      └→  brightness_ctl (HDMI backlight)
+core      iris_fetch ─────→ departures.json ──────────→ bahnhofstafel (LVGL display)
+                                                          ▲ bottom bar   ▲ blank/unblank
+plugins   weather_fetch ──→ bar.d/10-weather.json ───────┘              │
+                       └──→ weather.json (sunrise/sunset) ─→ brightness_ctl → monitor backlight (DDC/CI)
+          presence_ctl ───→ screen.d/50-presence.json ───────────────────┘   (also pauses brightness_ctl)
+          your plugin ────→ bar.d/NN-name.json  /  screen.d/NN-name.json
 ```
+(all files under `/run/bahnhofstafel/`; `PLUGINS` in `bahnhofstafel.conf` picks which plugins start)
 
 - **`iris_fetch`** — polls DB IRIS-TTS XML API every 60 s; writes departure data
 - **`weather_fetch`** — polls the Open-Meteo forecast API (free, keyless JSON) every 600 s; writes `weather.json` (incl. `sunrise`/`sunset`, for `brightness_ctl`) and is the **sample bar plugin** (`bar.d/10-weather.json`)
 - **`bahnhofstafel`** — LVGL framebuffer display; renders departures (`DEP_POLL_MS`) and the bottom bar from all `bar.d/*.json` plugin files (`BAR_POLL_MS`); knows nothing about weather; never returns
-- **`brightness_ctl`** — reads `weather.json` sunrise/sunset and sets the monitor backlight via DDC/CI (raw I²C write, VCP 0x10) on a smooth day/night curve. See "Brightness" below.
+- **`brightness_ctl`** (plugin) — reads `weather.json` sunrise/sunset and sets the monitor backlight via DDC/CI (raw I²C write, VCP 0x10) on a smooth day/night curve; pauses while the screen is off. See "Brightness" below.
+- **`presence_ctl`** (plugin) — mmWave radar on UART → `screen.d/50-presence.json` (`{"on": false}` after `PRESENCE_TIMEOUT_S` without presence). The display blanks the framebuffer whenever any `screen.d/*.json` says off (`screen.c`).
+- Which plugins start: `PLUGINS` in `bahnhofstafel.conf` (read by `start.sh`; default = bundled + `extra_daemons`).
 
 All JSON writes are atomic (`write_atomic()` in `src/fileio.c`: write to `{dest}.tmp.PID`, then `rename()`) so the display never reads a partial file. `iris_fetch` and `weather_fetch` share `http.c` (libcurl GET helper) and `fileio.c`.
 
@@ -24,7 +29,7 @@ Two shared headers, `#include`d by all programs, hold no logic — only `#define
 - **`config.h`** — URLs, IPC paths, poll intervals, limits, brightness tuning
 - **`schema.h`** — JSON field name constants (`DEP_*`, `WEA_*`, `BAR_*`) for the IPC files, so field renames propagate at compile time
 
-Source files in `src/`: `config.h`, `schema.h`, `http.c/h`, `fileio.c/h`, `iris_fetch.c`, `weather_fetch.c`, `brightness_curve.c/h`, `brightness_ctl.c`, `main.c`, `display.c/h`.
+Source files in `src/`: `config.h`, `schema.h`, `http.c/h`, `fileio.c/h`, `iris_fetch.c`, `weather_fetch.c`, `brightness_curve.c/h`, `brightness_ctl.c`, `presence_ctl.c`, `screen.c/h`, `settings.c/h`, `main.c`, `display.c/h`.
 
 ### Brightness (DDC/CI over HDMI I²C)
 
@@ -58,7 +63,7 @@ None currently required — `weather_fetch` polls Open-Meteo's free public API, 
 ssh -i .ssh/pi_key $PI   # PI is set in local.mk
 ```
 
-Log files on Pi: `~/bahnhofstafel/log/{iris,weather,display,brightness}.log`
+Log files on Pi: `~/bahnhofstafel/log/` (`iris.log`, `display.log`, `<plugin>.log`)
 
 ## Runtime (systemd) on the Pi
 

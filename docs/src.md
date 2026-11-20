@@ -11,7 +11,10 @@ Eleven C files and three headers implement the four programs.
 | [`iris_fetch.c`](#iris_fetchc) | `iris_fetch` | Polls DB IRIS-TTS API; writes `departures.json` |
 | [`weather_fetch.c`](#weather_fetchc) | `weather_fetch` | Polls Open-Meteo forecast API; writes `weather.json` |
 | [`brightness_curve.h`/`brightness_curve.c`](#brightness_curvec) | `brightness_ctl` | Pure brightness ramp function (sigmoid day/night curve) |
-| [`brightness_ctl.c`](#brightness_ctlc) | `brightness_ctl` | Reads sunrise/sunset; sets HDMI backlight via DDC/CI I²C |
+| [`brightness_ctl.c`](#brightness_ctlc) | `brightness_ctl` (plugin) | Reads sunrise/sunset; sets HDMI backlight via DDC/CI I²C |
+| [`presence_ctl.c`](#presence_ctlc) | `presence_ctl` (plugin) | mmWave radar → screen on/off request |
+| `screen.h`/`screen.c` | display, plugins | `screen_request()` / `screen_wanted_on()` over `screen.d/` |
+| `settings.h`/`settings.c` | all | Runtime settings (`bahnhofstafel.conf` / env) |
 | [`main.c`](#mainc) | `bahnhofstafel` | LVGL init + framebuffer setup; entry point |
 | [`display.c`](#displayc) | `bahnhofstafel` | All rendering logic: layout, fonts, data polling |
 | [`display.h`](#displayh) | `bahnhofstafel` | Public interface for `display.c` (two functions) |
@@ -222,12 +225,19 @@ Returns target brightness percent (0–100). Uses a sigmoid (`smoothstep`) ramp 
 
 ## `brightness_ctl.c`
 
-Standalone daemon. Reads `sunrise`/`sunset` from `weather.json`, calls `brightness_curve()`, and writes the result to the HDMI monitor's backlight via a raw DDC/CI Set-VCP-Feature I²C frame.
+Optional plugin. Reads `sunrise`/`sunset` from `weather.json`, calls `brightness_curve()`, and writes the result to the HDMI monitor's backlight via a raw DDC/CI Set-VCP-Feature I²C frame.
 
 - Falls back to `fallback_sun_times()` (from `BRIGHT_FALLBACK_RISE_H`/`SET_H`) if `weather.json` is unavailable — the full sigmoid curve is used with configurable clock hours, so brightness still ramps smoothly without weather data.
 - Writes are raw and never read back — the vc4 HDMI I²C read channel is unreliable on this Pi.
 - Runs as `dietpi` with the `i2c` supplementary group (granted by the systemd unit).
 - Re-checks every `BRIGHT_INTERVAL_S` seconds; only issues an I²C write when the target level changes.
+- Pauses while any `screen.d` plugin has the screen off (`screen_wanted_on()`), and re-applies the level when it comes back on.
+
+---
+
+## `presence_ctl.c`
+
+Optional screen plugin. Reads `$DFHPD,1` sentences from a DFRobot C4001 mmWave radar on `PRESENCE_DEVICE` (UART 9600 8N1) and writes `screen.d/50-presence.json` = `{"on": false}` after `PRESENCE_TIMEOUT_S` seconds without detection, `{"on": true}` as soon as someone is seen. The display blanks/unblanks the framebuffer (`FBIOBLANK`) from `screen.d`. Exits if the UART can't be opened, which leaves the screen on.
 
 ---
 

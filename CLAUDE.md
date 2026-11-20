@@ -54,6 +54,10 @@ cmake -B build-native && cmake --build build-native -j$(nproc)
 
 `make deploy` transfers binaries via `cat > file.new && mv file.new file` (avoids "text file busy"); the `bahnhofstafel` binary is gzip-streamed to avoid SSH timeouts. Fonts are pushed only if missing on the Pi.
 
+### Docker
+
+`Dockerfile` (stages `plugins` → `sdk` → `runtime`) builds everything natively inside Debian; CI (`.github/workflows/image.yml`, native arm64 runner) pushes `ghcr.io/suuppl/bahnhof-pi:sha-<commit>` and `…-sdk`. `docker/entrypoint.sh` starts iris_fetch + display + plugins (default: every other binary in `/app/bin`), exits when a core process dies. Out-of-tree single-file plugins: `BAHNHOF_PLUGIN_DIR` (CMake) / `FROM …-sdk` layer. See `docs/docker.md`.
+
 ### Secrets
 
 None currently required — `weather_fetch` polls Open-Meteo's free public API, no API key. `.env`/`start.sh`'s `.env` sourcing is kept as a placeholder for any future secret.

@@ -1,0 +1,11 @@
+.git
+**/.git
+build/
+build-native/
+sysroot/
+sysroot.new/
+.ssh/
+bahnhofstafel.conf
+line_colors.json
+local.mk
+.env

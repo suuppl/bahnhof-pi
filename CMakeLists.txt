@@ -60,6 +60,10 @@ endif()
 
 # ── LVGL ─────────────────────────────────────────────────────────────────
 
+# only the library: examples, demos and ThorVG are unused (see lv_conf.h)
+set(LV_CONF_BUILD_DISABLE_EXAMPLES ON CACHE BOOL "" FORCE)
+set(LV_CONF_BUILD_DISABLE_DEMOS ON CACHE BOOL "" FORCE)
+set(LV_CONF_BUILD_DISABLE_THORVG_INTERNAL ON CACHE BOOL "" FORCE)
 add_subdirectory(lvgl)
 target_compile_definitions(lvgl PUBLIC LV_CONF_INCLUDE_SIMPLE)
 target_include_directories(lvgl PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${INC_DIRS})
@@ -108,4 +112,19 @@ target_link_libraries(bahnhofstafel PRIVATE lvgl ${CJSON_LIB} ${FREETYPE_LIB} m)
 if(CROSS_LIB_DIR)
     target_link_directories(bahnhofstafel PRIVATE ${CROSS_LIB_DIR})
     target_link_libraries(bahnhofstafel PRIVATE ${CJSON_LIB} ${FREETYPE_LIB})
+endif()
+
+# ── extra plugins (out-of-tree) ───────────────────────────────────────────
+# Every *.c in BAHNHOF_PLUGIN_DIR becomes a plugin binary of the same name,
+# linked against bahnhof_common (http, fileio, settings, screen + curl/cJSON).
+# Used by the Docker image's `plugins` build context (docs/docker.md).
+set(BAHNHOF_PLUGIN_DIR "" CACHE PATH "Directory with single-file plugin sources (*.c)")
+if(BAHNHOF_PLUGIN_DIR)
+    file(GLOB _plugin_srcs CONFIGURE_DEPENDS "${BAHNHOF_PLUGIN_DIR}/*.c")
+    foreach(_src ${_plugin_srcs})
+        get_filename_component(_name ${_src} NAME_WE)
+        add_executable(${_name} ${_src})
+        target_link_libraries(${_name} PRIVATE bahnhof_common)
+        message(STATUS "bahnhofstafel: extra plugin ${_name}")
+    endforeach()
 endif()

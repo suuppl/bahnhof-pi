@@ -1,0 +1,22 @@
+# Example: run the board as a container (see docs/docker.md).
+# Copy next to your bahnhofstafel.conf / line_colors.json and pin the image tag.
+services:
+  bahnhofstafel:
+    image: ghcr.io/suuppl/bahnhof-pi:main   # pin sha-<commit> in production
+    container_name: bahnhofstafel
+    restart: unless-stopped
+    init: true
+    devices:
+      - /dev/fb0          # display
+      - /dev/tty1         # console -> graphics mode
+      - /dev/i2c-2        # brightness_ctl (DDC/CI) — remove if unused
+      - /dev/ttyAMA0      # presence_ctl (radar UART) — remove if unused
+    environment:
+      TZ: Europe/Berlin   # IRIS times are German local time
+    volumes:
+      - ./bahnhofstafel.conf:/app/bahnhofstafel.conf:ro
+      - ./line_colors.json:/app/line_colors.json:ro
+      - cache:/app/cache
+
+volumes:
+  cache:

@@ -78,6 +78,7 @@ Logs on the Pi: `~/bahnhofstafel/log/*.log`
 
 - [`docs/index.md`](docs/index.md) — root file descriptions, directory map
 - [`docs/src.md`](docs/src.md) — source file reference, data models, JSON shapes
+- [`docs/docker.md`](docs/docker.md) — running as a container (arm64 image on ghcr.io), own plugins on top
 - [`docs/plugins.md`](docs/plugins.md) — site config, bar plugins, embedding in a private repo
 - [`docs/line-colors.md`](docs/line-colors.md) — train line colours
 - [`docs/lvgl.md`](docs/lvgl.md) — LVGL submodule and `lv_conf.h` settings

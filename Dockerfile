@@ -1,14 +1,14 @@
 # syntax=docker/dockerfile:1
 #
-# Bahnhofstafel container image (see docs/docker.md).
+# Bahnhofstafel container image (see docs/docker.md). Usually built on the Pi
+# by compose straight from git:
 #
-#   docker buildx build --platform linux/arm64 -t bahnhofstafel .
+#   docker build -t bahnhofstafel https://github.com/suuppl/bahnhof-pi.git#<full-sha>
 #
 # Stages:
 #   plugins  empty by default; override with a named build context to compile
 #            your own single-file plugins in (`--build-context plugins=./dir`)
-#   sdk      Debian + build deps + sources + configured build tree; also used
-#            as a base to compile plugins against an already published image
+#   sdk      Debian + build deps + sources + build tree
 #   runtime  the image that runs on the Pi (default target)
 
 ARG DEBIAN_RELEASE=bookworm

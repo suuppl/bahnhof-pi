@@ -1,8 +1,14 @@
-# Example: run the board as a container (see docs/docker.md).
-# Copy next to your bahnhofstafel.conf / line_colors.json and pin the image tag.
+# Example: build and run the board as a container on the Pi (see docs/docker.md).
+# Put it next to your bahnhofstafel.conf / line_colors.json (and plugins/, optional).
 services:
   bahnhofstafel:
-    image: ghcr.io/suuppl/bahnhof-pi:main   # pin sha-<commit> in production
+    build:
+      # pin a full commit hash (BuildKit can't resolve short ones); bump it to update
+      context: https://github.com/suuppl/bahnhof-pi.git#<full-commit-sha>
+      # optional: your own single-file plugins (plugins/*.c), compiled into the image
+      # additional_contexts:
+      #   plugins: ./plugins
+    image: bahnhofstafel:local
     container_name: bahnhofstafel
     restart: unless-stopped
     init: true

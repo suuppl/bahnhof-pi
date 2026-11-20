@@ -1,26 +1,22 @@
 # Running in Docker
 
-Instead of `make deploy` + systemd, the board can run as one container. The
-image is built in CI for arm64 and published to
-`ghcr.io/suuppl/bahnhof-pi` (`.github/workflows/image.yml`):
+Instead of `make deploy` + systemd, the board can run as one container that
+Docker builds **on the Pi itself**, straight from this git repository: the
+`Dockerfile` compiles everything inside Debian (`DEBIAN_RELEASE`, default
+`bookworm`), so there's no cross compiler, no `make sysroot` and no registry.
 
-| Tag | Content |
-|-----|---------|
-| `sha-<commit>`, `main`, `latest`, `<version>` | runtime image: all programs, fonts, entrypoint |
-| `…-sdk` (e.g. `sha-<commit>-sdk`) | build stage: toolchain, sources, build tree; base for your own plugins |
+## Compose
 
-Pin `sha-<commit>` in production so a deploy never changes the version silently.
-
-## Running
-
-The container needs the framebuffer and the console TTY, plus the I²C bus and
-the UART if you use the brightness / presence plugins. No `--privileged`.
 See [`docker/docker-compose.example.yml`](../docker/docker-compose.example.yml):
 
 ```yaml
 services:
   bahnhofstafel:
-    image: ghcr.io/suuppl/bahnhof-pi:sha-<commit>
+    build:
+      context: https://github.com/suuppl/bahnhof-pi.git#<full-commit-sha>
+      additional_contexts:          # optional, your own plugins
+        plugins: ./plugins
+    image: bahnhofstafel:local
     restart: unless-stopped
     init: true
     devices:
@@ -38,50 +34,41 @@ volumes:
   cache:
 ```
 
-- **Settings:** the same `bahnhofstafel.conf` / `line_colors.json` as on bare metal, mounted into `/app`.
-  `APP_DIR` is `/app`, so paths in the conf refer to the container.
-- **Plugins:** by default every plugin in the image starts; `PLUGINS="…"` in the conf picks them.
-  A plugin that exits (e.g. `presence_ctl` without a sensor) doesn't stop the container; if
-  `iris_fetch` or the display exits, the container exits and `restart:` brings it back.
+`docker compose up -d --build` builds and starts it.
+
+- **Version pin:** the build context is the repo at a **full** commit hash (BuildKit can't
+  resolve abbreviated ones); bump it to update. Branch names (`#main`) work too, but then
+  each build may pick up new commits.
+- **Build time:** the first build compiles LVGL and takes a few minutes on a Pi 4 (longer
+  on older models). Later `--build` runs with the same pin and plugins hit the build cache.
+- **Settings:** the same `bahnhofstafel.conf` / `line_colors.json` as on bare metal, mounted
+  into `/app` (`APP_DIR`), so paths in the conf refer to the container.
+- **Plugins:** by default every plugin in the image starts; `PLUGINS="…"` in the conf picks
+  them. A plugin that exits (e.g. `presence_ctl` / `brightness_ctl` without their hardware)
+  doesn't stop the container; if `iris_fetch` or the display exits, the container exits and
+  `restart:` brings it back.
 - **Logs:** all programs log to stdout (`docker logs bahnhofstafel`).
-- **Remove a device line** if the hardware isn't there; Docker refuses to start with a missing device.
-
-### Host preparation (once)
-
-- Install Docker; stop and disable the bare-metal setup: `sudo systemctl disable --now bahnhofstafel.service`.
-- Fbcon cursor blink lives in sysfs, which is read-only in containers. If the cursor still
-  shows, keep a host boot step: `echo 0 > /sys/class/graphics/fbcon/cursor_blink`.
-- Hotkeys (triggerhappy): point them at `docker restart bahnhofstafel` / `docker stop bahnhofstafel`.
+- **Devices:** remove a line if the hardware isn't there; Docker refuses to start with a
+  missing device. No `--privileged` needed.
 
 ## Your own plugins
 
-Single-file C plugins (one `*.c` = one daemon, linked against `bahnhof_common`: `http.c`,
-`fileio.c`, `settings.c`, `screen.c`, curl, cJSON) can be layered onto a published image:
+Single-file C plugins (one `plugins/<name>.c` = one daemon `<name>`, linked against
+`bahnhof_common`: `http.c`, `fileio.c`, `settings.c`, `screen.c`, curl, cJSON) are compiled
+into the image when you pass the directory as the `plugins` build context (compose
+`additional_contexts` as above, or `docker build --build-context plugins=./plugins`). They
+start with the bundled plugins and read their own settings from `bahnhofstafel.conf` via
+`cfg_str()` / `cfg_long()`. See [`plugins.md`](plugins.md) for the bar/screen interfaces.
 
-```dockerfile
-ARG BAHNHOF_IMAGE=ghcr.io/suuppl/bahnhof-pi:sha-<commit>
-FROM ${BAHNHOF_IMAGE}-sdk AS build
-COPY plugins/ /src/plugins/
-RUN cmake -S /src -B /build -DBAHNHOF_PLUGIN_DIR=/src/plugins \
- && mkdir -p /plugins-out \
- && for f in /src/plugins/*.c; do n=$(basename "$f" .c); cmake --build /build --target "$n" && cp "/build/$n" /plugins-out/; done
+## Host preparation (once)
 
-FROM ${BAHNHOF_IMAGE}
-COPY --from=build /plugins-out/ /app/bin/
-```
+- Docker with Compose v2 (`additional_contexts` needs Compose ≥ 2.17).
+- Stop and disable the bare-metal setup: `sudo systemctl disable --now bahnhofstafel.service`.
+- Fbcon cursor blink lives in sysfs, which is read-only in containers. If the cursor still
+  shows, keep a host boot step: `echo 0 > /sys/class/graphics/fbcon/cursor_blink`.
+- Hotkeys (triggerhappy): point them at `docker stop bahnhofstafel` / `docker restart bahnhofstafel`.
 
-This only compiles your files (seconds, also on the Pi itself). They start automatically
-with the bundled plugins and read their own settings from `bahnhofstafel.conf` via
-`cfg_str()` / `cfg_long()`.
+## Stages
 
-Building the whole image from source with plugins works too:
-`docker buildx build --platform linux/arm64 --build-context plugins=./plugins -t bahnhofstafel .`
-
-## Building locally
-
-```sh
-docker buildx build --platform linux/arm64 -t bahnhofstafel .        # on an arm64 host, or with QEMU
-```
-
-The build runs inside Debian (`DEBIAN_RELEASE`, default `bookworm`), so it needs neither
-the cross compiler nor `make sysroot`.
+`plugins` (empty unless overridden by the build context) → `sdk` (Debian + build deps +
+sources + build tree) → `runtime` (default target, ~200 MB).

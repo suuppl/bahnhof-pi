@@ -56,7 +56,7 @@ cmake -B build-native && cmake --build build-native -j$(nproc)
 
 ### Docker
 
-`Dockerfile` (stages `plugins` → `sdk` → `runtime`) builds everything natively inside Debian; CI (`.github/workflows/image.yml`, native arm64 runner) pushes `ghcr.io/suuppl/bahnhof-pi:sha-<commit>` and `…-sdk`. `docker/entrypoint.sh` starts iris_fetch + display + plugins (default: every other binary in `/app/bin`), exits when a core process dies. Out-of-tree single-file plugins: `BAHNHOF_PLUGIN_DIR` (CMake) / `FROM …-sdk` layer. See `docs/docker.md`.
+`Dockerfile` (stages `plugins` → `sdk` → `runtime`) builds everything natively inside Debian, meant to be built on the Pi by compose straight from this git repo at a pinned full commit hash (no registry, no CI). `docker/entrypoint.sh` starts iris_fetch + display + plugins (default: every other binary in `/app/bin`), exits when a core process dies. Out-of-tree single-file plugins: `plugins` build context (compose `additional_contexts`) → `BAHNHOF_PLUGIN_DIR` (CMake). See `docs/docker.md`.
 
 ### Secrets
 

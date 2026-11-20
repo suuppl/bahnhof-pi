@@ -82,8 +82,9 @@ static void extract_destination(const char *ppth, char *out, size_t outsz) {
  * about dp@l: it may be the full line ("S3"), only the line number ("8"),
  * just the category ("RE"), or missing. Rules:
  *   l has letters + digits      → l as-is          ("S3", "RE8")
- *   l is digits only            → category + l     ("RE" + "8")
- *   l has no digits / is empty  → category + train number ("RE" + "4012")
+ *   l is digits only            → category + l     ("FLX" + "30")
+ *   l is a name ≠ category      → l as-is          ("FEX")
+ *   l is empty / == category    → category + train number ("ICE" + "649")
  */
 static void make_train_label(const Departure *d, char *out, size_t outsz) {
     const char *l = d->line;
@@ -96,6 +97,8 @@ static void make_train_label(const Departure *d, char *out, size_t outsz) {
         snprintf(out, outsz, "%s", l);
     else if (has_digit)
         snprintf(out, outsz, "%s%s", d->category, l);
+    else if (has_alpha && strcasecmp(l, d->category) != 0)
+        snprintf(out, outsz, "%s", l);
     else
         snprintf(out, outsz, "%s%s", d->category[0] ? d->category : l, d->number);
 }
@@ -315,7 +318,9 @@ static DepartureInfo departure_to_info(const Departure *d) {
 /* TRAIN_FILTER (config_local.h, or env var TRAIN_FILTER which wins, e.g. via
  * ~/bahnhofstafel/.env): comma/space separated entries, case-insensitive;
  * a departure is shown if it matches ANY entry. Empty = show everything.
- *   letters only  "S", "RE", "ICE"  → train type (IRIS category)
+ *   letters only  "S", "RE", "ICE"  → train type: IRIS category, or the
+ *                                     label's leading letters (operator
+ *                                     categories like "OE" run "RE8")
  *   digits only   "4012"            → train number (IRIS tl@n)
  *   mixed         "S3", "RE8"       → exact pill label
  */
@@ -340,7 +345,10 @@ static int train_matches_filter(const Departure *d, const char *label) {
         if (all_of(p, n, 1)) {                       /* train number */
             if (strlen(d->number) == n && strncmp(d->number, p, n) == 0) return 1;
         } else if (all_of(p, n, 0)) {                /* type */
+            size_t lt = 0;
+            while (label[lt] && !(label[lt] >= '0' && label[lt] <= '9')) lt++;
             if (strlen(d->category) == n && strncasecmp(d->category, p, n) == 0) return 1;
+            if (lt == n && strncasecmp(label, p, n) == 0) return 1;
         } else {                                     /* exact label */
             if (strlen(label) == n && strncasecmp(label, p, n) == 0) return 1;
         }

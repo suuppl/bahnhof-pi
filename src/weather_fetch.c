@@ -186,6 +186,12 @@ static int process(const char *raw) {
         fprintf(stderr, "weather_fetch: JSON parse error\n");
         return -1;
     }
+    if (cJSON_IsTrue(cJSON_GetObjectItem(root, "error"))) {   /* e.g. rate limit */
+        const char *why = cJSON_GetStringValue(cJSON_GetObjectItem(root, "reason"));
+        fprintf(stderr, "weather_fetch: Open-Meteo error: %s\n", why ? why : "?");
+        cJSON_Delete(root);
+        return -1;
+    }
 
     cJSON *cur = cJSON_GetObjectItem(root, "current");
     cJSON *daily = cJSON_GetObjectItem(root, "daily");

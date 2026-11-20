@@ -31,8 +31,9 @@ char *http_get(const char *url) {
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     curl_easy_cleanup(curl);
     if (rc != CURLE_OK || http_code >= 400) {
-        fprintf(stderr, "http_get: GET %s → %ld (%s)\n",
-                url, http_code, curl_easy_strerror(rc));
+        fprintf(stderr, "http_get: GET %s → %ld (%s)%s%.200s\n",
+                url, http_code, curl_easy_strerror(rc),
+                buf.data ? ": " : "", buf.data ? buf.data : "");
         free(buf.data);
         return NULL;
     }

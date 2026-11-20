@@ -79,6 +79,12 @@ static void fallback_sun_times(time_t now, time_t *sr, time_t *ss) {
 }
 
 int main(void) {
+    if (access(CFG_S(I2C_BUS_PATH), W_OK) != 0) {
+        fprintf(stderr, "brightness_ctl: cannot access %s — exiting (brightness unchanged)\n",
+                CFG_S(I2C_BUS_PATH));
+        return 1;
+    }
+    int write_failing = 0;
     time_t last_sun_update = 0;
     time_t sr = 0, ss = 0;
     int last_pct = -1;
@@ -102,8 +108,10 @@ int main(void) {
                     printf("brightness_ctl: %d%%\n", pct);
                     fflush(stdout);
                     last_pct = pct;
-                } else {
-                    fprintf(stderr, "brightness_ctl: brightness i2c write failed\n");
+                    write_failing = 0;
+                } else if (!write_failing) {   /* log once, keep retrying quietly */
+                    fprintf(stderr, "brightness_ctl: brightness i2c write failed (retrying)\n");
+                    write_failing = 1;
                 }
             }
         } else {

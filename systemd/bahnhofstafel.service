@@ -1,0 +1,26 @@
+[Unit]
+Description=Bahnhofstafel departure board
+After=network-online.target systemd-tmpfiles-setup.service
+Wants=network-online.target
+
+[Service]
+# @USER@/@APP_DIR@ are substituted by `make deploy`.
+# start.sh launches the processes in the background and exits; the
+# children stay in this unit's cgroup, so "systemctl stop" kills them all.
+Type=oneshot
+RemainAfterExit=yes
+User=@USER@
+Group=@USER@
+# video=/dev/fb0, tty=cursor on tty1, i2c=/dev/i2c-* for DDC/CI brightness
+SupplementaryGroups=video tty i2c
+ExecStartPre=+/bin/sh -c "printf '\\033[?25l' > /dev/tty1; echo 0 > /sys/class/graphics/fbcon/cursor_blink"
+ExecStart=/bin/bash /home/@USER@/@APP_DIR@/start.sh
+ExecStop=-/usr/bin/pkill -9 -x bahnhofstafel
+ExecStop=-/usr/bin/pkill -9 -x iris_fetch
+ExecStop=-/usr/bin/pkill -9 -x weather_fetch
+ExecStop=-/usr/bin/pkill -9 -x brightness_ctl
+KillMode=control-group
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target

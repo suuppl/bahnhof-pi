@@ -149,19 +149,91 @@ static void show_rows(int n) {
     g_row_count = n;
 }
 
-/* Train line → pill colours: first LINE_COLORS entry whose prefix matches
- * the train name wins (so list "S20" before "S2"). Override the table in
- * config_local.h to use your network's official colours. */
-typedef struct { const char *prefix; uint32_t bg; uint32_t fg; } LineColor;
-static const LineColor LINE_COLOR_TABLE[] = LINE_COLORS;
-#define LINE_COLOR_COUNT ((int)(sizeof(LINE_COLOR_TABLE) / sizeof(LINE_COLOR_TABLE[0])))
+/* Train line → pill colours, from LINE_COLORS_JSON (optional, reloaded when
+ * it changes; see docs/line-colors.md):
+ *   { "S1": "#16bae7", "S8": { "bg": "#000000", "fg": "#f0ac32" }, "RE": "#ec0016" }
+ * Lookup: exact train label ("S1") → its type, i.e. the leading letters
+ * ("S", "RE", "ICE") → built-in default for that type → grey. Without "fg"
+ * the text is black or white, whichever contrasts better. */
+#define LC_MAX 64
+typedef struct { char key[16]; uint32_t bg; uint32_t fg; } LineColor;
+static LineColor g_lc[LC_MAX];
+static int       g_lc_n;
+static time_t    g_lc_mtime = -1;
+
+static const LineColor LC_DEFAULTS[] = {   /* per train type */
+    { "S",   0x408335, 0xffffff },  /* S-Bahn green */
+    { "U",   0x1455c0, 0xffffff },  /* U-Bahn blue */
+    { "RE",  0xec0016, 0xffffff },  /* regional red */
+    { "RB",  0xec0016, 0xffffff },
+    { "IRE", 0xec0016, 0xffffff },
+    { "MEX", 0xec0016, 0xffffff },
+    { "ICE", 0xf8f8f2, 0x282a36 },  /* long-distance white */
+    { "IC",  0xf8f8f2, 0x282a36 },
+    { "EC",  0xf8f8f2, 0x282a36 },
+    { "ECE", 0xf8f8f2, 0x282a36 },
+    { "RJ",  0xf8f8f2, 0x282a36 },
+    { "NJ",  0xf8f8f2, 0x282a36 },
+};
+
+static uint32_t auto_fg(uint32_t bg) {
+    int r = (bg >> 16) & 0xff, g = (bg >> 8) & 0xff, b = bg & 0xff;
+    return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? 0x000000 : 0xffffff;
+}
+
+/* "#rrggbb" / "rrggbb" → 0xrrggbb; -1 if malformed */
+static long parse_hex_color(const char *s) {
+    if (!s) return -1;
+    if (*s == '#') s++;
+    if (strlen(s) != 6) return -1;
+    char *end;
+    long v = strtol(s, &end, 16);
+    return *end ? -1 : v;
+}
+
+static void load_line_colors(void) {
+    time_t mt = file_mtime(LINE_COLORS_JSON);
+    if (mt == g_lc_mtime) return;
+    g_lc_mtime = mt;
+    g_lc_n = 0;
+    char *raw = mt ? read_file(LINE_COLORS_JSON) : NULL;
+    cJSON *root = raw ? cJSON_Parse(raw) : NULL;
+    free(raw);
+    if (raw && !root) fprintf(stderr, "display: %s is not valid JSON\n", LINE_COLORS_JSON);
+    const cJSON *e;
+    cJSON_ArrayForEach(e, root) {
+        if (g_lc_n >= LC_MAX || !e->string) break;
+        long bg = parse_hex_color(cJSON_IsString(e) ? e->valuestring
+                                  : cJSON_GetStringValue(cJSON_GetObjectItem(e, "bg")));
+        if (bg < 0) { fprintf(stderr, "display: bad colour for \"%s\"\n", e->string); continue; }
+        long fg = cJSON_IsObject(e) ? parse_hex_color(cJSON_GetStringValue(cJSON_GetObjectItem(e, "fg"))) : -1;
+        LineColor *c = &g_lc[g_lc_n++];
+        snprintf(c->key, sizeof(c->key), "%s", e->string);
+        c->bg = (uint32_t)bg;
+        c->fg = fg >= 0 ? (uint32_t)fg : auto_fg((uint32_t)bg);
+    }
+    cJSON_Delete(root);
+}
+
+static const LineColor *find_lc(const LineColor *t, int n, const char *key) {
+    for (int i = 0; i < n; i++)
+        if (strcmp(t[i].key, key) == 0) return &t[i];
+    return NULL;
+}
 
 static const LineColor *line_color(const char *train) {
-    if (!train) return NULL;
-    for (int i = 0; i < LINE_COLOR_COUNT; i++)
-        if (strncmp(train, LINE_COLOR_TABLE[i].prefix, strlen(LINE_COLOR_TABLE[i].prefix)) == 0)
-            return &LINE_COLOR_TABLE[i];
-    return NULL;
+    if (!train || !*train) return NULL;
+    const LineColor *c = find_lc(g_lc, g_lc_n, train);
+    if (c) return c;
+    char type[16];
+    size_t i = 0;
+    while (train[i] && i < sizeof(type) - 1 &&
+           ((train[i] >= 'A' && train[i] <= 'Z') || (train[i] >= 'a' && train[i] <= 'z'))) {
+        type[i] = train[i]; i++;
+    }
+    type[i] = '\0';
+    if ((c = find_lc(g_lc, g_lc_n, type))) return c;
+    return find_lc(LC_DEFAULTS, (int)(sizeof(LC_DEFAULTS) / sizeof(LC_DEFAULTS[0])), type);
 }
 
 static uint32_t train_pill_color(const char *train) {
@@ -271,6 +343,7 @@ static void dep_poll_cb(lv_timer_t *t) {
      * iris_fetch wrote new data: the "minutes until" label depends on the
      * current wall clock, not just the JSON contents, so it must stay
      * fresh between the ~60s upstream IRIS polls too. */
+    load_line_colors();
     time_t mt = file_mtime(DEPARTURES_JSON);
     if (mt == 0) return;
     g_dep_mtime = mt;
@@ -486,10 +559,10 @@ static void init_dummy_data(void) {
     } d[] = {
         {3,  0, "S1", "Hauptbahnhof",  0},
         {7,  0, "S2", "Flughafen",     0},
-        {19, 3, "RE", "Altstadt",      0},
+        {19, 3, "RE1", "Altstadt",     0},
         {25, 0, "S1", "Messe",         0},
         {33, 0, "S2", "Hauptbahnhof",  1},
-        {40, 0, "RB", "Flughafen",     0},
+        {40, 0, "RB5", "Flughafen",     0},
         {46, 2, "S1", "Westkreuz",     0},
         {54, 0, "S2", "Ostbahnhof",    0},
     };
@@ -863,6 +936,7 @@ void display_init(void) {
     }
 
     /* fill dummy data now that g_max_rows is known */
+    load_line_colors();
     init_dummy_data();
 
     /* trigger clock + bar immediately */

@@ -47,7 +47,7 @@ No API keys are required — DB IRIS and Open-Meteo are public.
 | Pi host, SSH key, extra daemons | `local.mk` or `make` variables |
 | Poll intervals, brightness curve | `src/config.h` |
 | JSON field names shared across programs | `src/schema.h` |
-| Train line colours | `LINE_COLORS` in `src/config_local.h` |
+| Train line colours | `line_colors.json` → [`docs/line-colors.md`](docs/line-colors.md) |
 | Bottom bar contents (plugins) | [`docs/plugins.md`](docs/plugins.md) |
 
 ## Hardware
@@ -64,6 +64,7 @@ No API keys are required — DB IRIS and Open-Meteo are public.
 | `make build` | Cross-compile only (into `build/`) |
 | `make build-native` | Native build (compile check) |
 | `make deploy` | Build, push binaries + service, restart |
+| `make colors` | Push only `line_colors.json` (applied live) |
 | `make restart` | Restart service on Pi without rebuilding |
 | `make clean` | Delete build dirs |
 
@@ -74,6 +75,7 @@ Logs on the Pi: `~/bahnhofstafel/log/*.log`
 - [`docs/index.md`](docs/index.md) — root file descriptions, directory map
 - [`docs/src.md`](docs/src.md) — source file reference, data models, JSON shapes
 - [`docs/plugins.md`](docs/plugins.md) — site config, bar plugins, embedding in a private repo
+- [`docs/line-colors.md`](docs/line-colors.md) — train line colours
 - [`docs/lvgl.md`](docs/lvgl.md) — LVGL submodule and `lv_conf.h` settings
 - [`docs/sysroot.md`](docs/sysroot.md) — cross-compilation sysroot structure
 - [`docs/build.md`](docs/build.md) — CMake build output

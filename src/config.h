@@ -21,18 +21,6 @@
 #define STATION_EVA_FALLBACK 0
 #endif
 
-/* Train line pill colours: { prefix, background, text }, first match wins
- * (put longer prefixes like "S20" before "S2"). Unmatched lines are grey. */
-#ifndef LINE_COLORS
-#define LINE_COLORS { \
-    { "S",   0x408335, 0xffffff }, /* S-Bahn green */ \
-    { "RE",  0xec0016, 0xffffff }, /* regional red */ \
-    { "RB",  0xec0016, 0xffffff }, \
-    { "ICE", 0xf8f8f2, 0x282a36 }, /* long-distance white */ \
-    { "IC",  0xf8f8f2, 0x282a36 }, \
-    { "EC",  0xf8f8f2, 0x282a36 }, \
-}
-#endif
 
 /* Weather (Open-Meteo — free JSON API, no API key required) */
 #define OPEN_METEO_URL "https://api.open-meteo.com/v1/forecast"
@@ -68,6 +56,8 @@
 #define WEATHER_CACHE    CACHE_DIR "/weather.json"
 #define EVA_CACHE        CACHE_DIR "/eva"
 #define EMOJI_FONT_PATH  APP_DIR "/fonts/Twemoji.Mozilla.ttf"
+/* Optional train-line pill colours (docs/line-colors.md); reloaded on change */
+#define LINE_COLORS_JSON APP_DIR "/line_colors.json"
 
 /* Poll intervals */
 #define IRIS_INTERVAL_S    60

@@ -77,6 +77,28 @@ static void extract_destination(const char *ppth, char *out, size_t outsz) {
     out[outsz - 1] = '\0';
 }
 
+/* Train label for the pill: "S3", "RE8", "ICE1234". IRIS is inconsistent
+ * about dp@l: it may be the full line ("S3"), only the line number ("8"),
+ * just the category ("RE"), or missing. Rules:
+ *   l has letters + digits      → l as-is          ("S3", "RE8")
+ *   l is digits only            → category + l     ("RE" + "8")
+ *   l has no digits / is empty  → category + train number ("RE" + "4012")
+ */
+static void make_train_label(const Departure *d, char *out, size_t outsz) {
+    const char *l = d->line;
+    int has_digit = 0, has_alpha = 0;
+    for (const char *p = l; *p; p++) {
+        if (*p >= '0' && *p <= '9') has_digit = 1;
+        else if (*p != ' ') has_alpha = 1;
+    }
+    if (has_digit && has_alpha)
+        snprintf(out, outsz, "%s", l);
+    else if (has_digit)
+        snprintf(out, outsz, "%s%s", d->category, l);
+    else
+        snprintf(out, outsz, "%s%s", d->category[0] ? d->category : l, d->number);
+}
+
 /* ── station EVA lookup ─────────────────────────────────────────────────── */
 
 /* Returns the EVA number on success, 0 on any failure. */
@@ -276,13 +298,7 @@ static DepartureInfo departure_to_info(const Departure *d) {
     info.planned_ts = (double)d->planned_ts;
     info.changed_ts = (double)(d->changed_ts > 0 ? d->changed_ts : 0);
 
-    /* train label: "S1" or "ICE1234"
-     * IRIS dp@l already contains the full line name (e.g. "S1"),
-     * so use it directly; fall back to category+number. */
-    if (d->line[0])
-        snprintf(info.train, sizeof(info.train), "%s", d->line);
-    else
-        snprintf(info.train, sizeof(info.train), "%s%s", d->category, d->number);
+    make_train_label(d, info.train, sizeof(info.train));
 
     snprintf(info.destination, sizeof(info.destination), "%s", d->destination);
     snprintf(info.planned_platform, sizeof(info.planned_platform), "%s", d->planned_platform);

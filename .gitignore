@@ -12,3 +12,4 @@ gapi
 src/config_local.h
 config_local.h
 local.mk
+/line_colors.json

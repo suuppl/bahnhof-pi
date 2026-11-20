@@ -27,7 +27,7 @@ Every site-specific value is `#ifndef`-guarded and can be overridden from an opt
 
 - `STATION_NAME` — display name / IRIS lookup name (default `"Berlin Hbf"`)
 - `STATION_EVA_FALLBACK` — optional fallback EVA number (default 0 = none) used only if the live lookup fails and there is no cache yet; `iris_fetch` keeps retrying the lookup while unresolved
-- `LINE_COLORS` — `{ prefix, bg, fg }` table for the train pills (first prefix match wins; default: generic S-Bahn green / regional red / long-distance white)
+- `LINE_COLORS_JSON` — `APP_DIR/line_colors.json`, optional train-pill colours, reloaded on change (see [`line-colors.md`](line-colors.md))
 
 **Weather (Open-Meteo forecast API)**
 - `OPEN_METEO_URL` — API base URL (`https://api.open-meteo.com/v1/forecast`)

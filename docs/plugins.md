@@ -90,13 +90,14 @@ site-specific value is `#ifndef`-guarded, so whatever you define there wins:
 /* #define STATION_EVA_FALLBACK 1234567 */  /* only used if the lookup fails and nothing is cached */
 /* #define APP_DIR "/home/pi/bahnhofstafel" */
 /* #define I2C_BUS_PATH "/dev/i2c-2" */
-/* #define LINE_COLORS { { "S1", 0x16bae7, 0xffffff }, { "S", 0x408335, 0xffffff } } */
 ```
 
 Put it in `src/config_local.h` (git-ignored), or anywhere you like and pass
 `-DBAHNHOF_LOCAL_CONFIG_DIR=<dir>` to CMake.
 
-Deploy settings (`PI`, `SSH_KEY`, `APP_DIR`, `EXTRA_BINS`) go in a
+Train line colours live in `line_colors.json` (runtime, see [`line-colors.md`](line-colors.md)).
+
+Deploy settings (`PI`, `SSH_KEY`, `APP_DIR`, `EXTRA_BINS`, `LINE_COLORS_FILE`) go in a
 git-ignored `local.mk` next to the `Makefile`, or on the `make` command line.
 
 ## Embedding in a private repo

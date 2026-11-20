@@ -57,7 +57,7 @@ Compile-time **defaults**. Every setting except the IPC paths and array sizes is
 - `BAR_POLL_MS` (1000 ms) — how often `display.c` rescans `bar.d/`
 
 **Display**
-- `SHOW_PLATFORM` (0) — 1 = platform column at the right edge of each row; a changed platform (`changed_platform` ≠ `planned_platform`) is shown in orange, cancelled rows dimmed/struck through
+- `SHOW_PLATFORM` (1) — platform column at the right edge of each row; a changed platform (`changed_platform` ≠ `planned_platform`) is shown in orange, cancelled rows dimmed/struck through
 - `TRAIN_FILTER` ("") — optional comma/space list; only matching departures are written by `iris_fetch`: letters = train type (`S`, `RE`), digits = train number (`4012`), mixed = exact label (`S3`, `RE8`); case-insensitive. 
 - `DELAY_THRESHOLD_MIN` (5) — delays/early departures smaller than this are shown as on time (planned time, normal colour)
 

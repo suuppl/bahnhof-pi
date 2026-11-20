@@ -40,7 +40,7 @@
 /* [runtime] Show the platform at the right edge of each row (1/0); a
  * changed platform is shown in orange. */
 #ifndef SHOW_PLATFORM
-#define SHOW_PLATFORM 0
+#define SHOW_PLATFORM 1
 #endif
 
 /* ── Weather (Open-Meteo, keyless) ─────────────────────────────── [runtime] */

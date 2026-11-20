@@ -17,7 +17,7 @@ plugins   weather_fetch ──→ bar.d/10-weather.json ───────┘
 1920×1080/1200, Dracula dark theme.
 
 - **Header** — station name + clock (date + time, colon blinks)
-- **Departure rows** — delayed trains show changed time in orange + planned time; optional platform column (changed platform in orange)
+- **Departure rows** — delayed trains show changed time in orange + planned time; platform column (changed platform in orange, `SHOW_PLATFORM=0` hides it)
 - **Plugin bar** — filled entirely by plugins writing small JSON files; the bundled weather plugin shows temperature (min/max), UV index, rain probability and a condition icon
 
 ## Quick start

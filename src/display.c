@@ -257,6 +257,14 @@ static void departure_row_render(DepartureRow *row, DepartureInfo info) {
     /* time: minutes until departure, plus the absolute HH:MM clock time */
     char time_str[16];
     char clock_str[8];
+
+    /* Delays below DELAY_THRESHOLD_MIN are ignored: show the planned time in
+     * the normal colour, as if on time. Same for early departures. */
+    int show_delay = info.delay_min != 0 && !info.cancelled &&
+                     abs(info.delay_min) >= DELAY_THRESHOLD_MIN;
+    if (!show_delay && info.delay_min != 0 && info.planned_ts > 0)
+        info.effective_ts = info.planned_ts;
+
     if (info.effective_ts > 0) {
         /* Both sides rounded down to whole minutes before subtracting:
          * effective_ts is already minute-aligned (parsed from IRIS's HH:MM),
@@ -284,7 +292,7 @@ static void departure_row_render(DepartureRow *row, DepartureInfo info) {
     lv_obj_set_style_bg_color(row->train_pill, lv_color_hex(pill_bg), 0);
     lv_label_set_text(row->dest_lbl, info.destination[0] ? info.destination : "\xe2\x80\x93");
 
-    if (info.delay_min != 0 && info.planned_time[0]) {
+    if (show_delay && info.planned_time[0]) {
         char plan_str[32];
         snprintf(plan_str, sizeof(plan_str), "(%s)", info.planned_time);
         lv_label_set_text(row->planned_lbl, plan_str);
@@ -297,8 +305,8 @@ static void departure_row_render(DepartureRow *row, DepartureInfo info) {
 
     /* cancelled: grey out + strike through time/destination (pill background
      * turns grey too, but its white text is never struck through or recolored);
-     * otherwise orange = delayed/early, white = on-time. */
-    uint32_t c = info.cancelled ? C_DIM : (info.delay_min != 0 ? C_DELAY : C_TEXT);
+     * otherwise orange = delayed/early by >= DELAY_THRESHOLD_MIN, white = else. */
+    uint32_t c = info.cancelled ? C_DIM : (show_delay ? C_DELAY : C_TEXT);
     lv_text_decor_t decor = info.cancelled ? LV_TEXT_DECOR_STRIKETHROUGH : LV_TEXT_DECOR_NONE;
 
     set_text_color(row->time_lbl,  c);
@@ -559,11 +567,11 @@ static void init_dummy_data(void) {
     } d[] = {
         {3,  0, "S1", "Hauptbahnhof",  0},
         {7,  0, "S2", "Flughafen",     0},
-        {19, 3, "RE1", "Altstadt",     0},
+        {19, 7, "RE1", "Altstadt",     0},
         {25, 0, "S1", "Messe",         0},
         {33, 0, "S2", "Hauptbahnhof",  1},
         {40, 0, "RB5", "Flughafen",     0},
-        {46, 2, "S1", "Westkreuz",     0},
+        {46, 2, "S1", "Westkreuz",     0},  /* below threshold: shown on time */
         {54, 0, "S2", "Ostbahnhof",    0},
     };
     int n = (int)(sizeof(d) / sizeof(d[0]));

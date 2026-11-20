@@ -45,6 +45,7 @@ No API keys are required — DB IRIS and Open-Meteo are public.
 |------|-------|
 | Station, coordinates, install dir, devices | `src/config_local.h` (overrides `src/config.h`) |
 | Pi host, SSH key, extra daemons | `local.mk` or `make` variables |
+| Delay threshold (`DELAY_THRESHOLD_MIN`, default 5 min) | `src/config_local.h` |
 | Poll intervals, brightness curve | `src/config.h` |
 | JSON field names shared across programs | `src/schema.h` |
 | Train line colours | `line_colors.json` → [`docs/line-colors.md`](docs/line-colors.md) |

@@ -88,6 +88,7 @@ site-specific value is `#ifndef`-guarded, so whatever you define there wins:
 #define OPEN_METEO_LON "10.01"
 /* optional: */
 /* #define STATION_EVA_FALLBACK 1234567 */  /* only used if the lookup fails and nothing is cached */
+/* #define DELAY_THRESHOLD_MIN 5 */          /* smaller delays are shown as on time */
 /* #define APP_DIR "/home/pi/bahnhofstafel" */
 /* #define I2C_BUS_PATH "/dev/i2c-2" */
 ```

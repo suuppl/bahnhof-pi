@@ -67,6 +67,13 @@
 #define DEP_POLL_MS     5000
 #define BAR_POLL_MS     1000
 
+/* Minimum delay (minutes, early or late) before a departure is shown as
+ * delayed (orange, changed time + planned time). Smaller deviations are
+ * displayed as on time with the planned departure. */
+#ifndef DELAY_THRESHOLD_MIN
+#define DELAY_THRESHOLD_MIN 5
+#endif
+
 /* Max departures stored */
 #define MAX_DEPARTURES  120
 #define MAX_ROWS        16   /* max departure rows the display can show */

@@ -53,6 +53,9 @@ Every site-specific value is `#ifndef`-guarded and can be overridden from an opt
 - `DEP_POLL_MS` (5000 ms) — how often `display.c` re-reads `departures.json`
 - `BAR_POLL_MS` (1000 ms) — how often `display.c` rescans `bar.d/`
 
+**Display**
+- `DELAY_THRESHOLD_MIN` (5) — delays/early departures smaller than this are shown as on time (planned time, normal colour); overridable in `config_local.h`
+
 **Limits**
 - `MAX_DEPARTURES` (120) — size of the in-memory departure array in `iris_fetch`
 - `MAX_ROWS` (16) — maximum rows the display can show (actual count set at runtime from screen height)

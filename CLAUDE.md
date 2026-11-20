@@ -71,12 +71,12 @@ All processes run under **`bahnhofstafel.service`** (oneshot launcher of `start.
 ## Key facts
 
 - Target: Raspberry Pi aarch64, DietPi/Debian, framebuffer `/dev/fb0`
-- Station: `STATION_NAME` (example default Berlin Hbf, override in `config_local.h`); EVA resolved in `iris_fetch.c`: live lookup by name → `EVA_CACHE` file → optional `STATION_EVA_FALLBACK` (default 0); retried every cycle while unresolved
+- Station: `STATION_NAME` (example default Berlin Hbf); EVA resolved in `iris_fetch.c`: live lookup by name → `EVA_CACHE` file → optional `STATION_EVA_FALLBACK` (default 0); retried every cycle while unresolved
 - IRIS fetch order: **`fchg` first, then `rchg`** — `fchg` contains early-announced cancellations; `rchg` is merged after so its newer data overrides `fchg` for the same trip ID
 - Weather: Open-Meteo forecast API (`api.open-meteo.com`), no API key, no Visual Crossing/meteoblue despite older docs. Single request with `timezone=auto` returns `sunrise`/`sunset`/hourly timestamps as plain local ISO8601 strings — `weather_fetch.c` parses them with `sscanf` + `mktime()` (no UTC-offset math needed, relying on the Pi's system TZ matching the station's location); `weather.json`'s `sunrise`/`sunset` (real epoch seconds) are consumed by `brightness_ctl`. Condition icon comes from Open-Meteo's WMO `weather_code` + `is_day`, mapped in `weather_fetch.c` to a small fixed vocabulary `display.c` renders as an emoji glyph.
-- Bottom bar = plugins only: any process writes `bar.d/NN-name.json` (groups of emoji/value/width/sub, big `icon`, `align`, `dim`), concatenated in filename order. Site config (station, coordinates, paths) goes in `config_local.h` (`#ifndef`-guarded defaults in `config.h`). See `docs/plugins.md`.
-- **Never commit site-specific data** (station name/EVA, coordinates, local line names/colours, IPs, keys) — this repo is public; use `config_local.h` / `local.mk`.
-- Train filter: `TRAIN_FILTER` (config or env var, env wins) applied in `iris_fetch.c` `write_departures()`; letters = type, digits = train number, mixed = exact label.
+- Bottom bar = plugins only: any process writes `bar.d/NN-name.json` (groups of emoji/value/width/sub, big `icon`, `align`, `dim`), concatenated in filename order. Site config is runtime: `bahnhofstafel.conf` (KEY=value, key = `config.h` macro name, env overrides file; `settings.c`, `CFG_S()`/`CFG_I()` in code). `config.h` only holds defaults. See `docs/plugins.md`.
+- **Never commit site-specific data** (station name/EVA, coordinates, local line names/colours, IPs, keys) — this repo is public; use `bahnhofstafel.conf` / `line_colors.json` / `local.mk` (all git-ignored).
+- Train filter: `TRAIN_FILTER` (runtime setting) applied in `iris_fetch.c` `write_departures()`; letters = type, digits = train number, mixed = exact label.
 - Train pill colours: runtime `APP_DIR/line_colors.json` (`"S1": "#rrggbb"` or `{bg,fg}`), lookup exact label → type (leading letters) → built-in type default → grey; reloaded on change (`docs/line-colors.md`). Train label in `iris_fetch.c` `make_train_label()`: IRIS `dp@l` may be `"S3"`, `"8"`, `"RE"` or empty.
 - Fonts: DejaVu Sans + Twemoji/NotoEmoji via FreeType (`LV_USE_FREETYPE`) at runtime; `lv_conf.h` sets `LV_USE_FS_POSIX` (drive `A:` = `/`) so font files load from disk
 
@@ -91,7 +91,7 @@ All processes run under **`bahnhofstafel.service`** (oneshot launcher of `start.
 
 - [`docs/index.md`](docs/index.md) — root-level file descriptions, directory map
 - [`docs/src.md`](docs/src.md) — detailed data models, fetch cycles, JSON shapes for all source files
-- [`docs/plugins.md`](docs/plugins.md) — config_local.h, bar plugins, embedding in a private repo
+- [`docs/plugins.md`](docs/plugins.md) — runtime settings, bar plugins, embedding in a private repo
 - [`docs/line-colors.md`](docs/line-colors.md) — train line colours
 - [`docs/lvgl.md`](docs/lvgl.md) — LVGL submodule and `lv_conf.h` settings
 - [`docs/sysroot.md`](docs/sysroot.md) — cross-compilation sysroot structure

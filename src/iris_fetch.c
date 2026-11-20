@@ -16,6 +16,7 @@
 #include <libxml/tree.h>
 #include <cjson/cJSON.h>
 #include "config.h"
+#include "settings.h"
 #include "http.h"
 #include "fileio.h"
 #include "schema.h"
@@ -40,7 +41,7 @@ typedef struct {
 
 static Departure g_deps[MAX_DEPARTURES];
 static int       g_dep_count = 0;
-static long      g_eva = STATION_EVA_FALLBACK;
+static long      g_eva;   /* set in main() */
 
 /* ── time helpers ───────────────────────────────────────────────────────── */
 
@@ -108,9 +109,9 @@ static void make_train_label(const Departure *d, char *out, size_t outsz) {
 /* Returns the EVA number on success, 0 on any failure. */
 static long lookup_eva(void) {
     char url[512];
-    char *name = curl_easy_escape(NULL, STATION_NAME, 0);  /* UTF-8 → %XX */
+    char *name = curl_easy_escape(NULL, CFG_S(STATION_NAME), 0);  /* UTF-8 → %XX */
     if (!name) return 0;
-    snprintf(url, sizeof(url), "%s/%s", IRIS_STATION_URL, name);
+    snprintf(url, sizeof(url), "%s/%s", CFG_S(IRIS_STATION_URL), name);
     curl_free(name);
 
     char *xml_str = http_get(url);
@@ -315,8 +316,7 @@ static DepartureInfo departure_to_info(const Departure *d) {
 
 /* ── optional train filter ─────────────────────────────────────────────── */
 
-/* TRAIN_FILTER (config_local.h, or env var TRAIN_FILTER which wins, e.g. via
- * ~/bahnhofstafel/.env): comma/space separated entries, case-insensitive;
+/* TRAIN_FILTER (runtime setting, see settings.h): comma/space separated entries, case-insensitive;
  * a departure is shown if it matches ANY entry. Empty = show everything.
  *   letters only  "S", "RE", "ICE"  → train type: IRIS category, or the
  *                                     label's leading letters (operator
@@ -324,7 +324,7 @@ static DepartureInfo departure_to_info(const Departure *d) {
  *   digits only   "4012"            → train number (IRIS tl@n)
  *   mixed         "S3", "RE8"       → exact pill label
  */
-static const char *g_filter = TRAIN_FILTER;
+static const char *g_filter = "";   /* set in main() from TRAIN_FILTER */
 
 static int all_of(const char *s, size_t n, int digits) {
     for (size_t i = 0; i < n; i++) {
@@ -362,7 +362,7 @@ static void write_departures(void) {
 
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "fetched_at", (double)now);
-    cJSON_AddStringToObject(root, "station",    STATION_NAME);
+    cJSON_AddStringToObject(root, "station",    CFG_S(STATION_NAME));
     cJSON_AddNumberToObject(root, "eva",        (double)g_eva);
 
     cJSON *arr = cJSON_AddArrayToObject(root, "departures");
@@ -407,7 +407,7 @@ static void fetch_cycle(void) {
         strftime(date, sizeof(date), "%y%m%d", ts);
         snprintf(hour, sizeof(hour), "%02d", ts->tm_hour);
 
-        snprintf(url, sizeof(url), "%s/%ld/%s/%s", IRIS_PLAN_URL, g_eva, date, hour);
+        snprintf(url, sizeof(url), "%s/%ld/%s/%s", CFG_S(IRIS_PLAN_URL), g_eva, date, hour);
         xmlDocPtr doc = fetch_xml(url);
         if (doc) { parse_plan_doc(doc); xmlFreeDoc(doc); }
     }
@@ -416,12 +416,12 @@ static void fetch_cycle(void) {
     qsort(g_deps, g_dep_count, sizeof(Departure), dep_cmp);
 
     /* fchg (full changes): all known changes incl. cancellations from earlier today */
-    snprintf(url, sizeof(url), "%s/%ld", IRIS_FCHG_URL, g_eva);
+    snprintf(url, sizeof(url), "%s/%ld", CFG_S(IRIS_FCHG_URL), g_eva);
     xmlDocPtr fchg_doc = fetch_xml(url);
     if (fchg_doc) { merge_rchg_doc(fchg_doc); xmlFreeDoc(fchg_doc); }
 
     /* rchg (recent changes): may contain updates not yet in fchg */
-    snprintf(url, sizeof(url), "%s/%ld", IRIS_RCHG_URL, g_eva);
+    snprintf(url, sizeof(url), "%s/%ld", CFG_S(IRIS_RCHG_URL), g_eva);
     xmlDocPtr rchg_doc = fetch_xml(url);
     if (rchg_doc) { merge_rchg_doc(rchg_doc); xmlFreeDoc(rchg_doc); }
 
@@ -526,8 +526,8 @@ static void write_demo_board(const DemoBoard *b) {
 
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "fetched_at", (double)now);
-    cJSON_AddStringToObject(root, "station",    STATION_NAME);
-    cJSON_AddNumberToObject(root, "eva",        (double)STATION_EVA_FALLBACK);
+    cJSON_AddStringToObject(root, "station",    CFG_S(STATION_NAME));
+    cJSON_AddNumberToObject(root, "eva",        (double)CFG_I(STATION_EVA_FALLBACK));
 
     cJSON *arr = cJSON_AddArrayToObject(root, "departures");
     for (int i = 0; i < b->count; i++) {
@@ -582,8 +582,8 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    const char *env_filter = getenv("TRAIN_FILTER");
-    if (env_filter) g_filter = env_filter;
+    g_eva    = CFG_I(STATION_EVA_FALLBACK);
+    g_filter = CFG_S(TRAIN_FILTER);
     if (*g_filter) printf("iris_fetch: train filter \"%s\"\n", g_filter);
 
     mkdir(DATA_DIR, 0755);
@@ -599,7 +599,7 @@ int main(int argc, char **argv) {
         if (looked_up != g_eva) save_cached_eva(looked_up);
         g_eva = looked_up;
     }
-    printf("iris_fetch: station %s EVA=%ld (%s)\n", STATION_NAME, g_eva,
+    printf("iris_fetch: station %s EVA=%ld (%s)\n", CFG_S(STATION_NAME), g_eva,
            looked_up ? "live" : cached ? "cached" : "fallback");
 
     for (;;) {
@@ -608,8 +608,8 @@ int main(int argc, char **argv) {
             if (eva) { g_eva = eva; save_cached_eva(eva); }
         }
         if (g_eva) fetch_cycle();
-        else fprintf(stderr, "iris_fetch: station \"%s\" not resolved yet\n", STATION_NAME);
-        sleep(IRIS_INTERVAL_S);
+        else fprintf(stderr, "iris_fetch: station \"%s\" not resolved yet\n", CFG_S(STATION_NAME));
+        sleep(CFG_I(IRIS_INTERVAL_S));
     }
 
     xmlCleanupParser();

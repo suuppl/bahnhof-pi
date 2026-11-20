@@ -1,0 +1,45 @@
+# bahnhofstafel runtime settings — copy to bahnhofstafel.conf next to the
+# Makefile; `make deploy` / `make config` install it as
+# ~/bahnhofstafel/bahnhofstafel.conf. Restart to apply (`make restart`).
+# Keys are the macro names from src/config.h; anything not set here keeps
+# its compiled-in default. Environment variables override this file.
+
+# ── Station ────────────────────────────────────────────────────────────────
+STATION_NAME="Berlin Hbf"          # IRIS station name, looked up at startup
+#STATION_EVA_FALLBACK=0            # only if the lookup fails and nothing is cached
+#TRAIN_FILTER="S, RE8"             # type ("S"), line ("RE8") or train number ("4012")
+#DELAY_THRESHOLD_MIN=5             # smaller delays are shown as on time
+
+# ── Weather (Open-Meteo) ───────────────────────────────────────────────────
+OPEN_METEO_LAT=52.52
+OPEN_METEO_LON=13.37
+
+# ── Intervals ──────────────────────────────────────────────────────────────
+#IRIS_INTERVAL_S=60
+#WEATHER_INTERVAL_S=600
+#DEP_POLL_MS=5000
+#BAR_POLL_MS=1000
+
+# ── Brightness (DDC/CI) ────────────────────────────────────────────────────
+#BRIGHT_DAY_PCT=100
+#BRIGHT_NIGHT_PCT=0
+#BRIGHT_RAMP_S=2700
+#BRIGHT_INTERVAL_S=30
+#BRIGHT_FALLBACK_RISE_H=7
+#BRIGHT_FALLBACK_SET_H=21
+#I2C_BUS_PATH=/dev/i2c-2
+#DDC_I2C_ADDR=0x37
+#VCP_BRIGHTNESS=0x10
+
+# ── Presence sensor ────────────────────────────────────────────────────────
+#PRESENCE_DEVICE=/dev/ttyAMA0
+#PRESENCE_TIMEOUT_S=300
+
+# ── Paths / devices ────────────────────────────────────────────────────────
+#FB_DEVICE=/dev/fb0
+#FONT_PATH=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+#FONT_BOLD_PATH=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
+#EMOJI_FONT_PATH=/home/dietpi/bahnhofstafel/fonts/Twemoji.Mozilla.ttf   # default: APP_DIR/fonts/…
+#LINE_COLORS_JSON=/home/dietpi/bahnhofstafel/line_colors.json        # default: APP_DIR/…
+#IRIS_STATION_URL=https://iris.noncd.db.de/iris-tts/timetable/station
+#OPEN_METEO_URL=https://api.open-meteo.com/v1/forecast

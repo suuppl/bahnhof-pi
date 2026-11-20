@@ -29,6 +29,7 @@
 #include <curl/curl.h>
 #include <cjson/cJSON.h>
 #include "config.h"
+#include "settings.h"
 #include "http.h"
 #include "fileio.h"
 #include "schema.h"
@@ -368,7 +369,7 @@ int main(int argc, char **argv) {
             "&hourly=precipitation_probability"
             "&current=temperature_2m,weather_code,is_day,uv_index"
             "&timezone=auto&forecast_days=2", /* 2 days so "next hour" is available near midnight */
-            OPEN_METEO_URL, OPEN_METEO_LAT, OPEN_METEO_LON);
+            CFG_S(OPEN_METEO_URL), CFG_S(OPEN_METEO_LAT), CFG_S(OPEN_METEO_LON));
 
         char *raw = http_get(url);
         if (raw) {
@@ -376,7 +377,7 @@ int main(int argc, char **argv) {
                 printf("weather_fetch: updated %s\n", WEATHER_JSON);
             free(raw);
         }
-        sleep(WEATHER_INTERVAL_S);
+        sleep(CFG_I(WEATHER_INTERVAL_S));
     }
 
     curl_global_cleanup();

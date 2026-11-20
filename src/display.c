@@ -16,6 +16,7 @@
 #include "lvgl/src/libs/freetype/lv_freetype.h"
 #include <cjson/cJSON.h>
 #include "config.h"
+#include "settings.h"
 #include "display.h"
 #include "schema.h"
 #include "departure_info.h"
@@ -37,9 +38,7 @@
 #define BAR_H  163
 
 /* font paths — FreeType reads directly from the filesystem (no drive prefix) */
-#define FONT_PATH       "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-#define FONT_BOLD_PATH  "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-/* EMOJI_FONT_PATH comes from config.h (below APP_DIR) */
+/* FONT_PATH / FONT_BOLD_PATH / EMOJI_FONT_PATH: runtime settings (config.h) */
 
 /* colors — Dracula theme */
 #define C_BG        0x282a36   /* background */
@@ -261,7 +260,7 @@ static void departure_row_render(DepartureRow *row, DepartureInfo info) {
     /* Delays below DELAY_THRESHOLD_MIN are ignored: show the planned time in
      * the normal colour, as if on time. Same for early departures. */
     int show_delay = info.delay_min != 0 && !info.cancelled &&
-                     abs(info.delay_min) >= DELAY_THRESHOLD_MIN;
+                     abs(info.delay_min) >= CFG_I(DELAY_THRESHOLD_MIN);
     if (!show_delay && info.delay_min != 0 && info.planned_ts > 0)
         info.effective_ts = info.planned_ts;
 
@@ -329,7 +328,7 @@ static void update_departures(const char *json_str) {
 
     if (!g_has_real_data && n > 0) {
         g_has_real_data = 1;
-        if (stn_lbl) lv_label_set_text(stn_lbl, STATION_NAME);
+        if (stn_lbl) lv_label_set_text(stn_lbl, CFG_S(STATION_NAME));
     }
     if (n > MAX_ROWS) n = MAX_ROWS;
 
@@ -360,7 +359,7 @@ static void dep_poll_cb(lv_timer_t *t) {
 }
 
 static void fb_blank(int blank) {
-    int fd = open("/dev/fb0", O_RDWR);
+    int fd = open(CFG_S(FB_DEVICE), O_RDWR);
     if (fd < 0) return;
     ioctl(fd, FBIOBLANK, blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK);
     close(fd);
@@ -786,14 +785,14 @@ void display_init(void) {
     /* FreeType init: cache up to 512 glyphs */
     lv_freetype_init(512);
 
-    font_hdr      = lv_freetype_font_create(FONT_PATH,      LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 72, LV_FREETYPE_FONT_STYLE_NORMAL);
-    font_hdr_bold = lv_freetype_font_create(FONT_BOLD_PATH, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 72, LV_FREETYPE_FONT_STYLE_NORMAL);
-    font_row = lv_freetype_font_create(FONT_PATH, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 68, LV_FREETYPE_FONT_STYLE_NORMAL);
-    font_col = lv_freetype_font_create(FONT_PATH, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 36, LV_FREETYPE_FONT_STYLE_NORMAL);
-    font_wea = lv_freetype_font_create(FONT_PATH, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 64, LV_FREETYPE_FONT_STYLE_NORMAL);
+    font_hdr      = lv_freetype_font_create(CFG_S(FONT_PATH),      LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 72, LV_FREETYPE_FONT_STYLE_NORMAL);
+    font_hdr_bold = lv_freetype_font_create(CFG_S(FONT_BOLD_PATH), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 72, LV_FREETYPE_FONT_STYLE_NORMAL);
+    font_row = lv_freetype_font_create(CFG_S(FONT_PATH), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 68, LV_FREETYPE_FONT_STYLE_NORMAL);
+    font_col = lv_freetype_font_create(CFG_S(FONT_PATH), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 36, LV_FREETYPE_FONT_STYLE_NORMAL);
+    font_wea = lv_freetype_font_create(CFG_S(FONT_PATH), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 64, LV_FREETYPE_FONT_STYLE_NORMAL);
 
     if (!font_hdr || !font_row || !font_col || !font_wea) {
-        fprintf(stderr, "display: failed to load font from %s\n", FONT_PATH);
+        fprintf(stderr, "display: failed to load font from %s\n", CFG_S(FONT_PATH));
         font_hdr = font_row = font_col = font_wea = (lv_font_t *)&lv_font_montserrat_16;
     }
 
@@ -925,8 +924,8 @@ void display_init(void) {
 
     /* ── LVGL timers ───────────────────────────────────────────────────── */
     lv_timer_create(clock_cb,        1000,             NULL);
-    lv_timer_create(dep_poll_cb,     DEP_POLL_MS,      NULL);
-    lv_timer_create(bar_poll_cb,     BAR_POLL_MS,      NULL);
+    lv_timer_create(dep_poll_cb,     CFG_I(DEP_POLL_MS),      NULL);
+    lv_timer_create(bar_poll_cb,     CFG_I(BAR_POLL_MS),      NULL);
     lv_timer_create(presence_poll_cb, 1000,            NULL);
 
     /* Compute how many complete rows fit in the list area.

@@ -11,6 +11,8 @@
 #include <linux/kd.h>
 #include "lvgl/lvgl.h"
 #include "display.h"
+#include "config.h"
+#include "settings.h"
 
 static uint32_t tick_cb(void) {
     struct timespec ts;
@@ -56,7 +58,7 @@ int main(void) {
     lv_tick_set_cb(tick_cb);
 
     lv_display_t *disp = lv_linux_fbdev_create();
-    lv_linux_fbdev_set_file(disp, "/dev/fb0");
+    lv_linux_fbdev_set_file(disp, CFG_S(FB_DEVICE));
 
     display_init();
     display_run();   /* never returns */

@@ -76,31 +76,35 @@ echo '{"groups":[{"emoji":"🌡","value":"19°","width":170}]}' > /run/bahnhofst
   && mv /run/bahnhofstafel/bar.d/.tmp /run/bahnhofstafel/bar.d/60-room.json
 ```
 
-## Site settings — `config_local.h`
+## Site settings — `bahnhofstafel.conf`
 
-`src/config.h` includes an optional `config_local.h` first, and every
-site-specific value is `#ifndef`-guarded, so whatever you define there wins:
+Everything site-specific is a **runtime setting**: `KEY=value` lines in
+`~/bahnhofstafel/bahnhofstafel.conf` on the Pi, read at startup (restart to
+apply). Keys are the macro names from `src/config.h`, which holds the
+compiled-in defaults; environment variables override the file. All keys are
+listed in [`bahnhofstafel.conf.example`](../bahnhofstafel.conf.example).
 
-```c
-/* config_local.h */
-#define STATION_NAME   "Hamburg Hbf"        /* IRIS station name, looked up at startup */
-#define OPEN_METEO_LAT "53.55"
-#define OPEN_METEO_LON "10.01"
-/* optional: */
-/* #define STATION_EVA_FALLBACK 1234567 */  /* only used if the lookup fails and nothing is cached */
-/* #define TRAIN_FILTER "S, RE8" */          /* only these: type, line label or train number */
-/* #define DELAY_THRESHOLD_MIN 5 */          /* smaller delays are shown as on time */
-/* #define APP_DIR "/home/pi/bahnhofstafel" */
-/* #define I2C_BUS_PATH "/dev/i2c-2" */
+```sh
+STATION_NAME="Hamburg Hbf"     # IRIS station name, looked up at startup
+OPEN_METEO_LAT=53.55
+OPEN_METEO_LON=10.01
+TRAIN_FILTER="S, RE8"          # optional: type, line label or train number
+DELAY_THRESHOLD_MIN=5
 ```
 
-Put it in `src/config_local.h` (git-ignored), or anywhere you like and pass
-`-DBAHNHOF_LOCAL_CONFIG_DIR=<dir>` to CMake.
+Keep your copy as `bahnhofstafel.conf` next to the `Makefile` (git-ignored);
+`make deploy` installs it, `make config` pushes it and restarts. Plugins can
+use the same mechanism (`cfg_str()` / `cfg_long()` from `src/settings.h`,
+linked via `bahnhof_common`) for their own keys.
 
-Train line colours live in `line_colors.json` (runtime, see [`line-colors.md`](line-colors.md)).
+Train line colours live in `line_colors.json` (see [`line-colors.md`](line-colors.md)).
 
-Deploy settings (`PI`, `SSH_KEY`, `APP_DIR`, `EXTRA_BINS`, `LINE_COLORS_FILE`) go in a
-git-ignored `local.mk` next to the `Makefile`, or on the `make` command line.
+Deploy settings (`PI`, `SSH_KEY`, `APP_DIR`, `EXTRA_BINS`, `CONFIG_FILE`,
+`LINE_COLORS_FILE`) go in a git-ignored `local.mk` next to the `Makefile`, or
+on the `make` command line.
+
+A `config_local.h` on the include path (or `-DBAHNHOF_LOCAL_CONFIG_DIR=<dir>`)
+can still change the compiled-in defaults, but is rarely needed now.
 
 ## Embedding in a private repo
 
@@ -110,7 +114,7 @@ a submodule:
 ```
 my-site/
 ├── public/                 # this repo (git submodule)
-├── config/config_local.h
+├── bahnhofstafel.conf      # site settings (runtime)
 ├── src/my_plugin.c         # writes bar.d/50-my.json
 ├── CMakeLists.txt
 └── Makefile
@@ -121,7 +125,6 @@ my-site/
 ```cmake
 cmake_minimum_required(VERSION 3.16)
 project(my_site C)
-set(BAHNHOF_LOCAL_CONFIG_DIR ${CMAKE_CURRENT_SOURCE_DIR}/config CACHE PATH "" FORCE)
 add_subdirectory(public)
 add_executable(my_plugin src/my_plugin.c)
 target_link_libraries(my_plugin PRIVATE bahnhof_common)   # http.c, fileio.c, curl, cJSON

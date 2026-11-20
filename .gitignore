@@ -14,3 +14,5 @@ config_local.h
 local.mk
 /line_colors.json
 !line_colors.example.json
+/bahnhofstafel.conf
+!bahnhofstafel.conf.example

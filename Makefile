@@ -10,7 +10,8 @@ APP_DIR      ?= bahnhofstafel
 # and SRC_DIR := . (its own CMakeLists.txt add_subdirectory()s this repo).
 PUB          ?= .
 SRC_DIR      ?= $(PUB)
-# Optional train-line colours (docs/line-colors.md), pushed to the Pi on deploy
+# Optional runtime settings and train-line colours, pushed to the Pi on deploy
+CONFIG_FILE      ?= $(wildcard bahnhofstafel.conf)
 LINE_COLORS_FILE ?= $(wildcard line_colors.json)
 # Additional daemons built by a parent project; deployed and started too.
 EXTRA_BINS   ?=
@@ -25,7 +26,7 @@ REMOTE       := ~/$(APP_DIR)/bin
 CORE_BINS := iris_fetch weather_fetch brightness_ctl
 ALL_BINS  := $(CORE_BINS) $(EXTRA_BINS)
 
-.PHONY: all build build-native deploy colors restart clean
+.PHONY: all build build-native deploy config colors restart clean
 
 all: build deploy
 
@@ -53,6 +54,8 @@ deploy: build
 		< $(PUB)/systemd/start.sh
 	sed -e "s|@USER@|$(PI_USER)|g" -e "s|@APP_DIR@|$(APP_DIR)|g" $(PUB)/systemd/bahnhofstafel.service | \
 		$(SSH) $(PI) "sudo cp /dev/stdin /etc/systemd/system/bahnhofstafel.service && sudo systemctl daemon-reload"
+	# runtime settings — optional, read at startup
+	$(if $(CONFIG_FILE),$(SSH) $(PI) "cat > ~/$(APP_DIR)/bahnhofstafel.conf" < $(CONFIG_FILE))
 	# line colours — optional, the display reloads them when they change
 	$(if $(LINE_COLORS_FILE),$(SSH) $(PI) "cat > ~/$(APP_DIR)/line_colors.json" < $(LINE_COLORS_FILE))
 	# fonts — push only if missing (unchanging files)
@@ -60,6 +63,11 @@ deploy: build
 		$(SSH) $(PI) "test -f ~/$(APP_DIR)/fonts/$$f || (mkdir -p ~/$(APP_DIR)/fonts && cat > ~/$(APP_DIR)/fonts/$$f)" < $(PUB)/fonts/$$f; \
 	done
 	$(SSH) $(PI) "sudo systemctl start bahnhofstafel.service"
+
+# push only bahnhofstafel.conf and restart
+config:
+	$(SSH) $(PI) "cat > ~/$(APP_DIR)/bahnhofstafel.conf" < $(CONFIG_FILE)
+	$(SSH) $(PI) "sudo systemctl restart bahnhofstafel.service"
 
 # push only line_colors.json (no restart needed)
 colors:

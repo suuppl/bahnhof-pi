@@ -24,12 +24,9 @@ weather_fetch →  /run/bahnhofstafel/bar.d/10-weather.json (sample bar plugin)
 git clone --recursive <this repo>
 sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu cmake
 
-# your station / coordinates (git-ignored)
-cat > src/config_local.h <<'EOF'
-#define STATION_NAME         "Hamburg Hbf"
-#define OPEN_METEO_LAT       "53.55"
-#define OPEN_METEO_LON       "10.01"
-EOF
+# your station / coordinates (runtime settings, git-ignored)
+cp bahnhofstafel.conf.example bahnhofstafel.conf
+#   STATION_NAME="Hamburg Hbf"  OPEN_METEO_LAT=53.55  OPEN_METEO_LON=10.01  ...
 
 # your Pi (git-ignored)
 echo 'PI := dietpi@raspberrypi.local' > local.mk
@@ -43,11 +40,8 @@ No API keys are required — DB IRIS and Open-Meteo are public.
 
 | What | Where |
 |------|-------|
-| Station, coordinates, install dir, devices | `src/config_local.h` (overrides `src/config.h`) |
+| Station, train filter, delay threshold, coordinates, intervals, brightness, devices, fonts | `bahnhofstafel.conf` (runtime, restart to apply) — all keys in [`bahnhofstafel.conf.example`](bahnhofstafel.conf.example); defaults in `src/config.h` |
 | Pi host, SSH key, extra daemons | `local.mk` or `make` variables |
-| Delay threshold (`DELAY_THRESHOLD_MIN`, default 5 min) | `src/config_local.h` |
-| Train filter (`TRAIN_FILTER`, e.g. `"S"`, `"RE8"`, `"4012"`) | `src/config_local.h`, or `TRAIN_FILTER=…` in `~/bahnhofstafel/.env` on the Pi |
-| Poll intervals, brightness curve | `src/config.h` |
 | JSON field names shared across programs | `src/schema.h` |
 | Train line colours | `line_colors.json` → [`docs/line-colors.md`](docs/line-colors.md) |
 | Bottom bar contents (plugins) | [`docs/plugins.md`](docs/plugins.md) |
@@ -66,6 +60,7 @@ No API keys are required — DB IRIS and Open-Meteo are public.
 | `make build` | Cross-compile only (into `build/`) |
 | `make build-native` | Native build (compile check) |
 | `make deploy` | Build, push binaries + service, restart |
+| `make config` | Push only `bahnhofstafel.conf` and restart |
 | `make colors` | Push only `line_colors.json` (applied live) |
 | `make restart` | Restart service on Pi without rebuilding |
 | `make clean` | Delete build dirs |

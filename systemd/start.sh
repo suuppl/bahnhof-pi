@@ -3,6 +3,8 @@
 
 APP=$(dirname "$(readlink -f "$0")")
 BIN=$APP/bin
+# programs find bahnhofstafel.conf (runtime settings) via APP_DIR
+export APP_DIR="$APP"
 LOG=$APP/log
 # extra daemons from an embedding project (written by `make deploy`)
 EXTRA=$(cat "$APP/extra_daemons" 2>/dev/null)

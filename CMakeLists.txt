@@ -45,7 +45,7 @@ endif()
 
 # Exported so a parent project (add_subdirectory) can build extra fetchers
 # against the shared helpers: target_link_libraries(x PRIVATE bahnhof_common)
-add_library(bahnhof_common STATIC src/http.c src/fileio.c)
+add_library(bahnhof_common STATIC src/http.c src/fileio.c src/settings.c)
 target_link_libraries(bahnhof_common PUBLIC ${EXT_LIBS})
 target_include_directories(bahnhof_common PUBLIC src ${INC_DIRS})
 if(CROSS_LIB_DIR)
@@ -60,7 +60,7 @@ target_include_directories(lvgl PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${INC_DIRS})
 
 # ── iris_fetch ────────────────────────────────────────────────────────────
 
-add_executable(iris_fetch src/iris_fetch.c src/http.c src/fileio.c src/departure_info.c)
+add_executable(iris_fetch src/iris_fetch.c src/http.c src/fileio.c src/departure_info.c src/settings.c)
 target_include_directories(iris_fetch PRIVATE src ${INC_DIRS})
 target_link_libraries(iris_fetch PRIVATE ${EXT_LIBS})
 if(CROSS_LIB_DIR)
@@ -69,7 +69,7 @@ endif()
 
 # ── weather_fetch ─────────────────────────────────────────────────────────
 
-add_executable(weather_fetch src/weather_fetch.c src/http.c src/fileio.c src/weather_info.c)
+add_executable(weather_fetch src/weather_fetch.c src/http.c src/fileio.c src/weather_info.c src/settings.c)
 target_include_directories(weather_fetch PRIVATE src ${INC_DIRS})
 target_link_libraries(weather_fetch PRIVATE ${EXT_LIBS})
 if(CROSS_LIB_DIR)
@@ -78,7 +78,7 @@ endif()
 
 # ── brightness_ctl ────────────────────────────────────────────────────────
 
-add_executable(brightness_ctl src/brightness_ctl.c src/brightness_curve.c src/fileio.c)
+add_executable(brightness_ctl src/brightness_ctl.c src/brightness_curve.c src/fileio.c src/settings.c)
 target_include_directories(brightness_ctl PRIVATE src ${INC_DIRS})
 target_link_libraries(brightness_ctl PRIVATE ${CJSON_LIB})
 if(CROSS_LIB_DIR)
@@ -87,7 +87,7 @@ endif()
 
 # ── bahnhofstafel (display) ───────────────────────────────────────────────
 
-add_executable(bahnhofstafel src/main.c src/display.c src/departure_info.c src/fileio.c)
+add_executable(bahnhofstafel src/main.c src/display.c src/departure_info.c src/fileio.c src/settings.c)
 target_include_directories(bahnhofstafel PRIVATE src ${CMAKE_CURRENT_SOURCE_DIR} ${INC_DIRS})
 target_link_libraries(bahnhofstafel PRIVATE lvgl ${CJSON_LIB} ${FREETYPE_LIB} m)
 if(CROSS_LIB_DIR)

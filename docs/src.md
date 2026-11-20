@@ -23,7 +23,7 @@ Eleven C files and three headers implement the four programs.
 Single shared header `#include`d by all four programs. Contains only `#define` constants — no types or functions.
 
 **Station**
-Every site-specific value is `#ifndef`-guarded and can be overridden from an optional `config_local.h` (see [`plugins.md`](plugins.md)).
+Compile-time **defaults**. Every setting except the IPC paths and array sizes is a runtime setting: `KEY=value` (key = macro name) in `APP_DIR/bahnhofstafel.conf` or the environment, read at startup via `settings.c` (`CFG_S()` / `CFG_I()`). See [`bahnhofstafel.conf.example`](../bahnhofstafel.conf.example).
 
 - `STATION_NAME` — display name / IRIS lookup name (default `"Berlin Hbf"`)
 - `STATION_EVA_FALLBACK` — optional fallback EVA number (default 0 = none) used only if the live lookup fails and there is no cache yet; `iris_fetch` keeps retrying the lookup while unresolved
@@ -54,8 +54,8 @@ Every site-specific value is `#ifndef`-guarded and can be overridden from an opt
 - `BAR_POLL_MS` (1000 ms) — how often `display.c` rescans `bar.d/`
 
 **Display**
-- `TRAIN_FILTER` ("") — optional comma/space list; only matching departures are written by `iris_fetch`: letters = train type (`S`, `RE`), digits = train number (`4012`), mixed = exact label (`S3`, `RE8`); case-insensitive. Env var `TRAIN_FILTER` overrides it at runtime
-- `DELAY_THRESHOLD_MIN` (5) — delays/early departures smaller than this are shown as on time (planned time, normal colour); overridable in `config_local.h`
+- `TRAIN_FILTER` ("") — optional comma/space list; only matching departures are written by `iris_fetch`: letters = train type (`S`, `RE`), digits = train number (`4012`), mixed = exact label (`S3`, `RE8`); case-insensitive. 
+- `DELAY_THRESHOLD_MIN` (5) — delays/early departures smaller than this are shown as on time (planned time, normal colour)
 
 **Limits**
 - `MAX_DEPARTURES` (120) — size of the in-memory departure array in `iris_fetch`

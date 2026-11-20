@@ -18,6 +18,7 @@
 #include <sys/ioctl.h>
 #include <cjson/cJSON.h>
 #include "config.h"
+#include "settings.h"
 #include "schema.h"
 #include "brightness_curve.h"
 #include "fileio.h"
@@ -49,9 +50,9 @@ static int ddc_set_vcp(unsigned char vcp, unsigned char value) {
     unsigned char frame[7] = { 0x51, 0x84, 0x03, vcp, 0x00, value, chk };
 
     for (int attempt = 0; attempt < 3; attempt++) {
-        int fd = open(I2C_BUS_PATH, O_RDWR);
+        int fd = open(CFG_S(I2C_BUS_PATH), O_RDWR);
         if (fd >= 0) {
-            int ok = ioctl(fd, I2C_SLAVE_FORCE, DDC_I2C_ADDR) >= 0 &&
+            int ok = ioctl(fd, I2C_SLAVE_FORCE, CFG_I(DDC_I2C_ADDR)) >= 0 &&
                      write(fd, frame, sizeof frame) == (ssize_t)sizeof frame;
             close(fd);
             if (ok) return 0;
@@ -62,17 +63,17 @@ static int ddc_set_vcp(unsigned char vcp, unsigned char value) {
 }
 
 static int ddc_set_brightness(int pct) {
-    return ddc_set_vcp(VCP_BRIGHTNESS, (unsigned char)pct);
+    return ddc_set_vcp(CFG_I(VCP_BRIGHTNESS), (unsigned char)pct);
 }
 
 
 /* Synthetic sunrise/sunset for today using fixed fallback hours from config.h. */
 static void fallback_sun_times(time_t now, time_t *sr, time_t *ss) {
     struct tm t = *localtime(&now);
-    t.tm_hour = BRIGHT_FALLBACK_RISE_H; t.tm_min = 0; t.tm_sec = 0;
+    t.tm_hour = CFG_I(BRIGHT_FALLBACK_RISE_H); t.tm_min = 0; t.tm_sec = 0;
     *sr = mktime(&t);
     t = *localtime(&now);
-    t.tm_hour = BRIGHT_FALLBACK_SET_H;  t.tm_min = 0; t.tm_sec = 0;
+    t.tm_hour = CFG_I(BRIGHT_FALLBACK_SET_H);  t.tm_min = 0; t.tm_sec = 0;
     *ss = mktime(&t);
 }
 
@@ -89,7 +90,7 @@ static void write_presence_json(int present) {
 
 /* Open the presence sensor UART in raw non-blocking mode. Returns fd or -1. */
 static int open_presence_uart(void) {
-    int fd = open(PRESENCE_DEVICE, O_RDONLY | O_NOCTTY | O_NONBLOCK);
+    int fd = open(CFG_S(PRESENCE_DEVICE), O_RDONLY | O_NOCTTY | O_NONBLOCK);
     if (fd < 0) return -1;
     struct termios tty = {0};
     cfsetspeed(&tty, B9600);
@@ -125,7 +126,7 @@ int main(void) {
     int uart_fd = open_presence_uart();
     if (uart_fd < 0)
         fprintf(stderr, "brightness_ctl: cannot open %s — presence detection disabled\n",
-                PRESENCE_DEVICE);
+                CFG_S(PRESENCE_DEVICE));
 
     time_t last_seen      = time(NULL);   /* assume presence at startup */
     time_t last_sun_update = 0;
@@ -140,13 +141,13 @@ int main(void) {
         time_t now = time(NULL);
 
         /* Refresh sun times every BRIGHT_INTERVAL_S seconds. */
-        if (now - last_sun_update >= BRIGHT_INTERVAL_S) {
+        if (now - last_sun_update >= CFG_I(BRIGHT_INTERVAL_S)) {
             if (read_sun_times(&sr, &ss) != 0)
                 fallback_sun_times(now, &sr, &ss);
             last_sun_update = now;
         }
 
-        int present = (now - last_seen) <= PRESENCE_TIMEOUT_S;
+        int present = (now - last_seen) <= CFG_I(PRESENCE_TIMEOUT_S);
         if (present != last_present) {
             write_presence_json(present);
             last_present = present;

@@ -80,3 +80,10 @@ Logs on the Pi: `~/bahnhofstafel/log/*.log`
 - [`docs/sysroot.md`](docs/sysroot.md) — cross-compilation sysroot structure
 - [`docs/build.md`](docs/build.md) — CMake build output
 - [`docs/ssh.md`](docs/ssh.md) — SSH key setup
+
+## License
+
+The project's own code is public domain ([The Unlicense](LICENSE)). Bundled
+fonts, the LVGL submodule and the cross-compilation `sysroot/` libraries
+keep their own licenses (OFL 1.1, CC-BY 4.0 / Apache-2.0, MIT, curl, FTL);
+see [`THIRD_PARTY.md`](THIRD_PARTY.md) for details and required attributions.

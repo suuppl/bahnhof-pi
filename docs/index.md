@@ -123,5 +123,6 @@ Placeholder for a future local secrets file. Currently unused — no daemon requ
 | File | Purpose |
 |------|---------|
 | `DejaVuSans.ttf` / `DejaVuSans-Bold.ttf` | Primary text font (system copy used on Pi; not bundled) |
-| `Twemoji.Mozilla.ttf` | Color emoji font (COLR v0 format); deployed to `~/bahnhofstafel/fonts/` |
-| `NotoEmoji-Regular.ttf` | Monochrome emoji fallback |
+| `Twemoji.Mozilla.ttf` | Color emoji font (COLR v0 format); deployed to `~/bahnhofstafel/fonts/` — CC-BY 4.0 / Apache-2.0, see `LICENSE-Twemoji.txt` |
+| `NotoEmoji-Regular.ttf` | Monochrome emoji font (use via `EMOJI_FONT_PATH` if colour emoji don't render) — OFL 1.1, see `OFL-NotoEmoji.txt` |
+| `OFL-NotoEmoji.txt`, `LICENSE-Twemoji.txt` | Font licenses (see `THIRD_PARTY.md`) |

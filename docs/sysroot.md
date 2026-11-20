@@ -14,11 +14,16 @@ sysroot/
 │   ├── curl/         # libcurl headers
 │   ├── libxml2/      # libxml2 headers
 │   ├── cjson/        # cJSON headers
-│   └── freetype2/    # FreeType (pulled in transitively)
+│   └── freetype2/    # FreeType headers
 ├── lib/
-│   └── aarch64-linux-gnu/   # aarch64 .so stubs
-└── usr/              # Additional system headers (if needed)
+│   └── aarch64-linux-gnu/   # libcurl, libxml2, libcjson, libfreetype .so only
+└── LICENSES/         # license texts for the above (see README.md there)
 ```
+
+Only the four libraries the programs link directly are included. Their
+transitive dependencies (OpenSSL, zlib, nghttp2, …) are not needed at link
+time (`-Wl,--allow-shlib-undefined`) and come from the Pi at runtime. When
+adding a library, also add its license to `LICENSES/` and `THIRD_PARTY.md`.
 
 ## How it is used
 

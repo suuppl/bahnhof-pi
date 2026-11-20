@@ -54,6 +54,7 @@ Every site-specific value is `#ifndef`-guarded and can be overridden from an opt
 - `BAR_POLL_MS` (1000 ms) — how often `display.c` rescans `bar.d/`
 
 **Display**
+- `TRAIN_FILTER` ("") — optional comma/space list; only matching departures are written by `iris_fetch`: letters = train type (`S`, `RE`), digits = train number (`4012`), mixed = exact label (`S3`, `RE8`); case-insensitive. Env var `TRAIN_FILTER` overrides it at runtime
 - `DELAY_THRESHOLD_MIN` (5) — delays/early departures smaller than this are shown as on time (planned time, normal colour); overridable in `config_local.h`
 
 **Limits**

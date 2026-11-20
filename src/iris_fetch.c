@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <time.h>
 #include <sys/stat.h>
@@ -309,6 +310,45 @@ static DepartureInfo departure_to_info(const Departure *d) {
     return info;
 }
 
+/* ── optional train filter ─────────────────────────────────────────────── */
+
+/* TRAIN_FILTER (config_local.h, or env var TRAIN_FILTER which wins, e.g. via
+ * ~/bahnhofstafel/.env): comma/space separated entries, case-insensitive;
+ * a departure is shown if it matches ANY entry. Empty = show everything.
+ *   letters only  "S", "RE", "ICE"  → train type (IRIS category)
+ *   digits only   "4012"            → train number (IRIS tl@n)
+ *   mixed         "S3", "RE8"       → exact pill label
+ */
+static const char *g_filter = TRAIN_FILTER;
+
+static int all_of(const char *s, size_t n, int digits) {
+    for (size_t i = 0; i < n; i++) {
+        int is_digit = s[i] >= '0' && s[i] <= '9';
+        if (is_digit != digits) return 0;
+    }
+    return n > 0;
+}
+
+static int train_matches_filter(const Departure *d, const char *label) {
+    const char *p = g_filter;
+    int any = 0;
+    while (*p) {
+        while (*p == ',' || *p == ' ') p++;
+        size_t n = strcspn(p, ", ");
+        if (n == 0) break;
+        any = 1;
+        if (all_of(p, n, 1)) {                       /* train number */
+            if (strlen(d->number) == n && strncmp(d->number, p, n) == 0) return 1;
+        } else if (all_of(p, n, 0)) {                /* type */
+            if (strlen(d->category) == n && strncasecmp(d->category, p, n) == 0) return 1;
+        } else {                                     /* exact label */
+            if (strlen(label) == n && strncasecmp(label, p, n) == 0) return 1;
+        }
+        p += n;
+    }
+    return !any;
+}
+
 static void write_departures(void) {
     time_t now = time(NULL);
 
@@ -329,6 +369,7 @@ static void write_departures(void) {
         if (d->hidden || eff < now - grace) continue;
 
         DepartureInfo info = departure_to_info(d);
+        if (!train_matches_filter(d, info.train)) continue;
         cJSON_AddItemToArray(arr, serialize_departure_info(&info));
         written++;
     }
@@ -532,6 +573,10 @@ int main(int argc, char **argv) {
         run_demo();
         return 0;
     }
+
+    const char *env_filter = getenv("TRAIN_FILTER");
+    if (env_filter) g_filter = env_filter;
+    if (*g_filter) printf("iris_fetch: train filter \"%s\"\n", g_filter);
 
     mkdir(DATA_DIR, 0755);
     curl_global_init(CURL_GLOBAL_DEFAULT);

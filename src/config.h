@@ -74,6 +74,14 @@
 #define DELAY_THRESHOLD_MIN 5
 #endif
 
+/* Optional train filter: only show matching departures. Comma/space list;
+ * "S" / "RE" = train type, "S3" / "RE8" = line label, "4012" = train
+ * number. "" = show all. The TRAIN_FILTER env var (e.g. in .env) overrides
+ * this at runtime. */
+#ifndef TRAIN_FILTER
+#define TRAIN_FILTER ""
+#endif
+
 /* Max departures stored */
 #define MAX_DEPARTURES  120
 #define MAX_ROWS        16   /* max departure rows the display can show */

@@ -23,30 +23,24 @@ stock or reverting it.
 
 ## Local patches
 
-Three files carry intentional, commented modifications (`/* Local patch: ... */`)
-required for this project's hardware and fonts. They are **not** accidental
-drift and should not be reverted:
+`patches/lvgl-*.patch` are applied to the `lvgl/` submodule checkout by
+`CMakeLists.txt` at configure time (skipped when already applied), so every
+build — cross, native and Docker — gets them. Marked `/* Local patch ... */`:
 
-- **`src/drivers/display/fb/lv_linux_fbdev.c`** — `flush_cb` now calls
+- **`src/drivers/display/fb/lv_linux_fbdev.c`** — `flush_cb` calls
   `ioctl(fbfd, FBIO_WAITFORVSYNC, ...)` before writing pixels, to avoid
-  tearing on the Pi's single-buffer `vc4drmfb`. The ioctl constant isn't in
-  mainline `linux/fb.h` so it's `#define`d locally; on drivers that don't
-  support it the ioctl just returns `-1` harmlessly.
+  tearing on the Pi's single-buffer `vc4drmfb` (`-1` harmlessly where unsupported).
 - **`src/libs/freetype/lv_freetype_glyph.c`** and
-  **`src/libs/freetype/lv_freetype_image.c`** — add support for **color
-  bitmap fonts** (CBDT/CBLC, e.g. NotoColorEmoji/Twemoji). Stock LVGL's
-  FreeType glue only handles vector/grayscale glyphs
-  (`FT_LOAD_NO_BITMAP`, `A8` format) and can't load or render color emoji
-  strikes at all. The patch detects `FT_HAS_COLOR` faces, selects the
-  nearest embedded bitmap strike (`FT_Select_Size`), loads with
-  `FT_LOAD_COLOR`, and rasterizes to `ARGB8888` (scaling down from the
-  strike's native size to the requested font size) instead of `A8`. This is
-  what makes the weather condition emoji (`display.c`'s WMO-code → glyph
-  mapping) render at all.
+  **`src/libs/freetype/lv_freetype_image.c`** — **color emoji**. Stock LVGL's
+  FreeType glue renders `Twemoji.Mozilla.ttf` (COLR) glyphs as empty A8
+  bitmaps, i.e. the bar emoji vanish. For `FT_HAS_COLOR` faces the patch loads
+  with `FT_LOAD_COLOR`, marks the glyph `LV_FONT_GLYPH_FORMAT_IMAGE` and
+  converts FreeType's premultiplied BGRA to an `ARGB8888` draw buffer (needs
+  `LV_USE_IMGFONT 1`).
 
-If LVGL is ever bumped to a newer upstream commit, these three patches need
-to be re-applied/re-verified against the new source — check
-`git -C lvgl diff` beforehand to recover the current patch content.
+To change a patch: edit the files in `lvgl/`, then
+`git -C lvgl diff > patches/lvgl-local.patch`. If LVGL is bumped and a patch
+no longer applies, cmake stops with an error.
 
 ## Configuration
 

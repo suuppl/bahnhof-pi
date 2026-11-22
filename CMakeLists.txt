@@ -64,6 +64,25 @@ endif()
 set(LV_CONF_BUILD_DISABLE_EXAMPLES ON CACHE BOOL "" FORCE)
 set(LV_CONF_BUILD_DISABLE_DEMOS ON CACHE BOOL "" FORCE)
 set(LV_CONF_BUILD_DISABLE_THORVG_INTERNAL ON CACHE BOOL "" FORCE)
+
+# local LVGL patches (color emoji, fbdev vsync — docs/lvgl.md), applied to the
+# submodule checkout at configure time; skipped if already applied
+file(GLOB LVGL_PATCHES ${CMAKE_CURRENT_SOURCE_DIR}/patches/lvgl-*.patch)
+foreach(p ${LVGL_PATCHES})
+  execute_process(COMMAND patch -p1 -R --dry-run -s -f -i ${p}
+                  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/lvgl
+                  RESULT_VARIABLE applied OUTPUT_QUIET ERROR_QUIET)
+  if(NOT applied EQUAL 0)
+    execute_process(COMMAND patch -p1 -N -s -f -i ${p}
+                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/lvgl
+                    RESULT_VARIABLE rc)
+    if(NOT rc EQUAL 0)
+      message(FATAL_ERROR "Applying ${p} to lvgl/ failed — reset it with `git -C lvgl checkout .` and re-run cmake")
+    endif()
+    message(STATUS "Applied ${p}")
+  endif()
+endforeach()
+
 add_subdirectory(lvgl)
 target_compile_definitions(lvgl PUBLIC LV_CONF_INCLUDE_SIMPLE)
 target_include_directories(lvgl PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${INC_DIRS})

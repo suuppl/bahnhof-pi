@@ -1,0 +1,99 @@
+diff --git a/src/drivers/display/fb/lv_linux_fbdev.c b/src/drivers/display/fb/lv_linux_fbdev.c
+index 076ada4..ac2424d 100644
+--- a/src/drivers/display/fb/lv_linux_fbdev.c
++++ b/src/drivers/display/fb/lv_linux_fbdev.c
+@@ -259,6 +259,16 @@ static void flush_cb(lv_display_t * disp, const lv_area_t * area, uint8_t * colo
+         return;
+     }
+ 
++    /* Local patch (bahnhofstafel): wait for vsync before writing to the
++     * single-buffered fb (vc4drmfb) to avoid tearing; harmless -1 if unsupported. */
++#ifndef FBIO_WAITFORVSYNC
++#define FBIO_WAITFORVSYNC _IOW('F', 0x20, uint32_t)
++#endif
++    {
++        uint32_t crtc = 0;
++        (void)ioctl(dsc->fbfd, FBIO_WAITFORVSYNC, &crtc);
++    }
++
+     int32_t w = lv_area_get_width(area);
+     int32_t h = lv_area_get_height(area);
+     lv_color_format_t cf = lv_display_get_color_format(disp);
+diff --git a/src/libs/freetype/lv_freetype_glyph.c b/src/libs/freetype/lv_freetype_glyph.c
+index 7ed2178..d1c5717 100644
+--- a/src/libs/freetype/lv_freetype_glyph.c
++++ b/src/libs/freetype/lv_freetype_glyph.c
+@@ -137,7 +137,10 @@ static bool freetype_glyph_create_cb(lv_freetype_glyph_cache_data_t * data, void
+     FT_UInt glyph_index = FT_Get_Char_Index(face, data->unicode);
+ 
+     FT_Set_Pixel_Sizes(face, 0, dsc->size);
+-    error = FT_Load_Glyph(face, glyph_index,  FT_LOAD_COMPUTE_METRICS | FT_LOAD_NO_BITMAP | FT_LOAD_NO_AUTOHINT);
++    /* Local patch (bahnhofstafel): color emoji (COLR) fonts are rendered to an ARGB image */
++    bool color = FT_HAS_COLOR(face) && dsc->render_mode == LV_FREETYPE_FONT_RENDER_MODE_BITMAP;
++    if(color) error = FT_Load_Glyph(face, glyph_index, FT_LOAD_COLOR | FT_LOAD_RENDER | FT_LOAD_NO_AUTOHINT);
++    else error = FT_Load_Glyph(face, glyph_index,  FT_LOAD_COMPUTE_METRICS | FT_LOAD_NO_BITMAP | FT_LOAD_NO_AUTOHINT);
+     if(error) {
+         FT_ERROR_MSG("FT_Load_Glyph", error);
+         lv_mutex_unlock(&dsc->cache_node->face_lock);
+@@ -171,7 +174,8 @@ static bool freetype_glyph_create_cb(lv_freetype_glyph_cache_data_t * data, void
+         dsc_out->ofs_x = glyph->bitmap_left;                         /*X offset of the bitmap in [pf]*/
+         dsc_out->ofs_y = glyph->bitmap_top -
+                          dsc_out->box_h;                             /*Y offset of the bitmap measured from the as line*/
+-        dsc_out->format = LV_FONT_GLYPH_FORMAT_A8;
++        dsc_out->format = (color && glyph_bitmap->pixel_mode == FT_PIXEL_MODE_BGRA) ?
++                          LV_FONT_GLYPH_FORMAT_IMAGE : LV_FONT_GLYPH_FORMAT_A8;
+     }
+ 
+     dsc_out->is_placeholder = glyph_index == 0;
+diff --git a/src/libs/freetype/lv_freetype_image.c b/src/libs/freetype/lv_freetype_image.c
+index ab7dad2..e3914c9 100755
+--- a/src/libs/freetype/lv_freetype_image.c
++++ b/src/libs/freetype/lv_freetype_image.c
+@@ -128,13 +128,17 @@ static bool freetype_image_create_cb(lv_freetype_image_cache_data_t * data, void
+ 
+     FT_Face face = dsc->cache_node->face;
+     FT_Set_Pixel_Sizes(face, 0, dsc->size);
+-    error = FT_Load_Glyph(face, data->glyph_index,  FT_LOAD_RENDER | FT_LOAD_TARGET_NORMAL | FT_LOAD_NO_AUTOHINT);
++    /* Local patch (bahnhofstafel): color emoji (COLR) fonts are rendered to an ARGB image */
++    FT_Int32 flags = FT_LOAD_RENDER | FT_LOAD_TARGET_NORMAL | FT_LOAD_NO_AUTOHINT;
++    if(FT_HAS_COLOR(face)) flags |= FT_LOAD_COLOR;
++    error = FT_Load_Glyph(face, data->glyph_index, flags);
+     if(error) {
+         FT_ERROR_MSG("FT_Load_Glyph", error);
+         lv_mutex_unlock(&dsc->cache_node->face_lock);
+         return false;
+     }
+-    error = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL);
++    if(face->glyph->format != FT_GLYPH_FORMAT_BITMAP)
++        error = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL);
+     if(error) {
+         FT_ERROR_MSG("FT_Render_Glyph", error);
+         lv_mutex_unlock(&dsc->cache_node->face_lock);
+@@ -154,6 +158,27 @@ static bool freetype_image_create_cb(lv_freetype_image_cache_data_t * data, void
+     uint16_t box_h = glyph_bitmap->bitmap.rows;         /*Height of the bitmap in [px]*/
+     uint16_t box_w = glyph_bitmap->bitmap.width;        /*Width of the bitmap in [px]*/
+ 
++    if(glyph_bitmap->bitmap.pixel_mode == FT_PIXEL_MODE_BGRA) {
++        /*FreeType BGRA is premultiplied; LVGL ARGB8888 (B,G,R,A in memory) is straight*/
++        uint32_t cstride = lv_draw_buf_width_to_stride(box_w, LV_COLOR_FORMAT_ARGB8888);
++        data->draw_buf = lv_draw_buf_create_ex(font_draw_buf_handlers, box_w, box_h, LV_COLOR_FORMAT_ARGB8888, cstride);
++        for(int y = 0; y < box_h; ++y) {
++            const uint8_t * src = glyph_bitmap->bitmap.buffer + y * glyph_bitmap->bitmap.pitch;
++            uint8_t * dst = (uint8_t *)(data->draw_buf->data) + y * cstride;
++            for(int x = 0; x < box_w; ++x, src += 4, dst += 4) {
++                uint8_t a = src[3];
++                if(a == 0) { dst[0] = dst[1] = dst[2] = dst[3] = 0; continue; }
++                dst[0] = (uint8_t)LV_MIN(255, src[0] * 255 / a);
++                dst[1] = (uint8_t)LV_MIN(255, src[1] * 255 / a);
++                dst[2] = (uint8_t)LV_MIN(255, src[2] * 255 / a);
++                dst[3] = a;
++            }
++        }
++        FT_Done_Glyph(glyph);
++        lv_mutex_unlock(&dsc->cache_node->face_lock);
++        return true;
++    }
++
+     uint32_t stride = lv_draw_buf_width_to_stride(box_w, LV_COLOR_FORMAT_A8);
+     data->draw_buf = lv_draw_buf_create_ex(font_draw_buf_handlers, box_w, box_h, LV_COLOR_FORMAT_A8, stride);
+ 

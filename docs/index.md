@@ -101,6 +101,7 @@ Placeholder for a future local secrets file. Currently unused — no daemon requ
 | `systemd/` | Service unit, `start.sh`, hotkey config | — |
 | `fonts/` | Runtime fonts deployed to Pi (`DejaVuSans`, `Twemoji.Mozilla.ttf`) | — |
 | `lvgl/` | LVGL graphics library (git submodule, v9.x) | [lvgl.md](lvgl.md) |
+| `patches/` | Local LVGL patches (color emoji, fbdev vsync), applied by CMake | [lvgl.md](lvgl.md#local-patches) |
 | `sysroot/` | Pi headers + link libraries for cross-compilation — not in git, created by `make sysroot` | [sysroot.md](sysroot.md) |
 | `build/` | CMake build output (generated, not in version control) | [build.md](build.md) |
 | `.ssh/` | SSH key for Pi access (not in version control) | [ssh.md](ssh.md) |

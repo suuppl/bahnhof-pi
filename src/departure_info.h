@@ -27,6 +27,8 @@ typedef struct {
     char   changed_platform[16];  /* DEP_CHANGED_PLATFORM */
     char   status;                /* DEP_STATUS: 'p'=planned, 'a'=added, 'c'=cancelled */
     int    delay_min;             /* DEP_DELAY_MIN, 0 if none */
+    char   mark[16];              /* DEP_MARK, direction emoji or "" */
+    char   mark_bg[8];            /* DEP_MARK_BG, "#rrggbb" or "" */
 
     /* derived once by departure_info_derive(), not re-derived by each
      * consumer (see ADR 0001/0002) */
@@ -43,6 +45,12 @@ void departure_info_derive(DepartureInfo *info, int delay_threshold_min);
 /* Board order (qsort comparator on DepartureInfo): effective_ts, then
  * planned_ts, then destination (byte order). */
 int departure_info_cmp(const void *a, const void *b);
+
+/* Direction marker for a route: spec is DIR_MARKS ("stop:emoji[:#rrggbb]",
+ * comma separated), path the remaining stops ("A|B|C"). The first entry
+ * whose stop occurs in path wins; returns false (and empty outputs) if none. */
+bool departure_mark_match(const char *spec, const char *path,
+                          char *emoji, size_t emoji_sz, char *bg, size_t bg_sz);
 
 /* True once the shown time is more than grace_s seconds in the past. */
 bool departure_info_departed(const DepartureInfo *info, time_t now, int grace_s);

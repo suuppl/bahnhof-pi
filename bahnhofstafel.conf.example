@@ -14,6 +14,8 @@ STATION_NAME="Berlin Hbf"          # IRIS station name, looked up at startup
 #DELAY_THRESHOLD_MIN=5             # smaller delays are shown as on time
 #DEPARTED_GRACE_S=60               # seconds a departed train stays on the board
 #SHOW_PLATFORM=1                   # 0 = hide the platform column (orange if changed)
+#LINE_BADGE=auto                   # auto: line badge in the header if only one line runs; header; rows
+#DIR_MARKS="Pasing:🏢:#2f5d8a, Olching:🐄:#b8860b"   # stop:emoji[:#rrggbb] → marker before the destination
 
 # ── Weather (Open-Meteo) ───────────────────────────────────────────────────
 OPEN_METEO_LAT=52.52

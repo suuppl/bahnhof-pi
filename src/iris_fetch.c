@@ -34,6 +34,7 @@ typedef struct {
     char planned_platform[16];
     char changed_platform[16];
     char destination[192];   /* last element of dp@ppth */
+    char path[1024];         /* dp@ppth: remaining stops "A|B|C" (DIR_MARKS) */
     char status;             /* 'p'=planned, 'a'=added, 'c'=cancelled */
     int  delay_min;          /* (changed_ts - planned_ts)/60, 0 if none */
     int  hidden;             /* dp@hi == 1 → don't show */
@@ -199,7 +200,11 @@ static void parse_plan_doc(xmlDocPtr doc) {
 
         if (pt)   { d->planned_ts = parse_iris_time((char*)pt); xmlFree(pt); }
         if (pp)   { strncpy(d->planned_platform, (char*)pp, sizeof(d->planned_platform)-1); xmlFree(pp); }
-        if (ppth) { extract_destination((char*)ppth, d->destination, sizeof(d->destination)); xmlFree(ppth); }
+        if (ppth) {
+            extract_destination((char*)ppth, d->destination, sizeof(d->destination));
+            snprintf(d->path, sizeof(d->path), "%s", (char*)ppth);
+            xmlFree(ppth);
+        }
         if (l)    { strncpy(d->line, (char*)l, sizeof(d->line)-1); xmlFree(l); }
         if (hi)   { d->hidden = atoi((char*)hi); xmlFree(hi); }
 
@@ -255,6 +260,7 @@ static void merge_rchg_doc(xmlDocPtr doc) {
             if (cpth && d->status != 'c') {
                 /* changed path → update destination, but keep planned dest for cancelled trains */
                 extract_destination((char*)cpth, d->destination, sizeof(d->destination));
+                snprintf(d->path, sizeof(d->path), "%s", (char*)cpth);
                 xmlFree(cpth);
             } else if (cpth) {
                 xmlFree(cpth);
@@ -311,6 +317,8 @@ static DepartureInfo departure_to_info(const Departure *d) {
     info.status = d->status;
     info.delay_min = d->delay_min;
     departure_info_derive(&info, CFG_I(DELAY_THRESHOLD_MIN));
+    departure_mark_match(CFG_S(DIR_MARKS), d->path, info.mark, sizeof(info.mark),
+                         info.mark_bg, sizeof(info.mark_bg));
 
     return info;
 }
@@ -383,6 +391,20 @@ static void write_departures(void) {
         rows[n++] = info;
     }
     qsort(rows, n, sizeof(*rows), departure_info_cmp);
+
+    /* line badge placement (LINE_BADGE): the most frequent line over the
+     * whole fetched window (~11 h), and whether it is the only one — stable,
+     * unlike looking at just the visible rows */
+    int best = 0, single = n > 0;
+    const char *main_line = "";
+    for (int i = 0; i < n; i++) {
+        int cnt = 0;
+        for (int j = 0; j < n; j++) cnt += strcmp(rows[i].train, rows[j].train) == 0;
+        if (cnt > best) { best = cnt; main_line = rows[i].train; }
+        if (strcmp(rows[i].train, rows[0].train) != 0) single = 0;
+    }
+    cJSON_AddStringToObject(root, DEP_MAIN_LINE,   main_line);
+    cJSON_AddStringToObject(root, DEP_SINGLE_LINE, single ? main_line : "");
     for (int i = 0; i < n && i < MAX_ROWS; i++)
         cJSON_AddItemToArray(arr, serialize_departure_info(&rows[i]));
     free(rows);

@@ -256,7 +256,7 @@ static uint32_t train_pill_text_color(const char *train) {
  * way they once did (ADR 0002). */
 static void departure_row_render(DepartureRow *row, DepartureInfo info) {
     /* time: minutes until departure, plus the absolute HH:MM clock time */
-    char time_str[16];
+    char time_str[24];   /* fits any long */
     char clock_str[8];
 
     /* Delays below DELAY_THRESHOLD_MIN are ignored (departure_info_derive):
@@ -272,7 +272,6 @@ static void departure_row_render(DepartureRow *row, DepartureInfo info) {
          * Truncating now to its minute matches how station boards count. */
         long mins = (long)info.effective_ts / 60 - time(NULL) / 60;
         if (mins < 0) mins = 0;
-        if (mins > 999) mins = 999;   /* fits time_str; IRIS plan reaches ~10 h ahead */
         snprintf(time_str, sizeof(time_str), "%ld", mins);
 
         time_t eff_time = (time_t)info.effective_ts;

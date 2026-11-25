@@ -272,6 +272,7 @@ static void departure_row_render(DepartureRow *row, DepartureInfo info) {
          * Truncating now to its minute matches how station boards count. */
         long mins = (long)info.effective_ts / 60 - time(NULL) / 60;
         if (mins < 0) mins = 0;
+        if (mins > 999) mins = 999;   /* fits time_str; IRIS plan reaches ~10 h ahead */
         snprintf(time_str, sizeof(time_str), "%ld", mins);
 
         time_t eff_time = (time_t)info.effective_ts;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <time.h>
 #include <cjson/cJSON.h>
 
 /* The complete value that crosses the departures.json IPC boundary — every
@@ -27,15 +28,25 @@ typedef struct {
     char   status;                /* DEP_STATUS: 'p'=planned, 'a'=added, 'c'=cancelled */
     int    delay_min;             /* DEP_DELAY_MIN, 0 if none */
 
-    /* derived once here, not re-derived by each consumer (see ADR 0001/0002) */
-    double effective_ts;          /* changed_ts if reported and off-schedule, else planned_ts */
+    /* derived once by departure_info_derive(), not re-derived by each
+     * consumer (see ADR 0001/0002) */
     bool   cancelled;             /* status == 'c' */
+    bool   show_delay;            /* not cancelled, changed_ts set, |delay_min| >= threshold */
+    double effective_ts;          /* the time the board shows: changed_ts if show_delay, else planned_ts */
 } DepartureInfo;
 
+/* Fill the derived fields from the raw ones. Delays smaller than
+ * delay_threshold_min count as on time, so effective_ts is the planned
+ * time — the same time producer (filter) and display (countdown) use. */
+void departure_info_derive(DepartureInfo *info, int delay_threshold_min);
+
+/* True once the shown time is more than grace_s seconds in the past. */
+bool departure_info_departed(const DepartureInfo *info, time_t now, int grace_s);
+
 /* Parse one departure JSON object (an element of the "departures" array)
- * into a typed value. Never fails short of malformed JSON, which is already
+ * into a typed value (derived fields via departure_info_derive()). Never fails short of malformed JSON, which is already
  * caught earlier by cJSON_Parse returning NULL. */
-DepartureInfo parse_departure_info(const cJSON *dep);
+DepartureInfo parse_departure_info(const cJSON *dep, int delay_threshold_min);
 
 /* Serialize a DepartureInfo into a new cJSON object (caller owns/frees it).
  * Used by both the real fetch path and the demo path so they can't drift

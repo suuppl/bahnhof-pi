@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "departure_info.h"
 #include "schema.h"
@@ -8,7 +9,7 @@ static void copy_str(char *dst, size_t dst_sz, const cJSON *obj, const char *key
     snprintf(dst, dst_sz, "%s", s ? s : "");
 }
 
-DepartureInfo parse_departure_info(const cJSON *dep) {
+DepartureInfo parse_departure_info(const cJSON *dep, int delay_threshold_min) {
     DepartureInfo info = {0};
 
     copy_str(info.planned_time, sizeof(info.planned_time), dep, DEP_PLANNED_TIME);
@@ -24,11 +25,20 @@ DepartureInfo parse_departure_info(const cJSON *dep) {
     info.status = (stat && stat[0]) ? stat[0] : 'p';
     info.delay_min = (int)cJSON_GetNumberValue(cJSON_GetObjectItem(dep, DEP_DELAY_MIN));
 
-    info.cancelled = (info.status == 'c');
-    info.effective_ts = (info.changed_ts > 0 && info.delay_min != 0)
-                       ? info.changed_ts : info.planned_ts;
-
+    departure_info_derive(&info, delay_threshold_min);
     return info;
+}
+
+void departure_info_derive(DepartureInfo *info, int delay_threshold_min) {
+    info->cancelled = (info->status == 'c');
+    info->show_delay = !info->cancelled && info->changed_ts > 0 && info->delay_min != 0 &&
+                       abs(info->delay_min) >= delay_threshold_min;
+    info->effective_ts = (info->show_delay || !(info->planned_ts > 0))
+                       ? info->changed_ts : info->planned_ts;
+}
+
+bool departure_info_departed(const DepartureInfo *info, time_t now, int grace_s) {
+    return info->effective_ts > 0 && info->effective_ts + grace_s < (double)now;
 }
 
 cJSON *serialize_departure_info(const DepartureInfo *info) {

@@ -259,12 +259,9 @@ static void departure_row_render(DepartureRow *row, DepartureInfo info) {
     char time_str[16];
     char clock_str[8];
 
-    /* Delays below DELAY_THRESHOLD_MIN are ignored: show the planned time in
-     * the normal colour, as if on time. Same for early departures. */
-    int show_delay = info.delay_min != 0 && !info.cancelled &&
-                     abs(info.delay_min) >= CFG_I(DELAY_THRESHOLD_MIN);
-    if (!show_delay && info.delay_min != 0 && info.planned_ts > 0)
-        info.effective_ts = info.planned_ts;
+    /* Delays below DELAY_THRESHOLD_MIN are ignored (departure_info_derive):
+     * effective_ts is then the planned time, shown as if on time. */
+    bool show_delay = info.show_delay;
 
     if (info.effective_ts > 0) {
         /* Both sides rounded down to whole minutes before subtracting:
@@ -340,14 +337,20 @@ static void update_departures(const char *json_str) {
         g_has_real_data = 1;
         if (stn_lbl) lv_label_set_text(stn_lbl, CFG_S(STATION_NAME));
     }
-    if (n > MAX_ROWS) n = MAX_ROWS;
 
-    for (int i = 0; i < n; i++) {
-        cJSON *dep = cJSON_GetArrayItem(arr, i);
-        departure_row_render(&g_rows[i], parse_departure_info(dep));
+    /* also drop departed rows here: iris_fetch rewrites the file only once
+     * per fetch cycle (>60 s), the display re-renders every DEP_POLL_MS */
+    time_t now = time(NULL);
+    int grace = CFG_I(DEPARTED_GRACE_S), shown = 0;
+    cJSON *dep;
+    cJSON_ArrayForEach(dep, arr) {
+        if (shown >= MAX_ROWS) break;
+        DepartureInfo info = parse_departure_info(dep, CFG_I(DELAY_THRESHOLD_MIN));
+        if (departure_info_departed(&info, now, grace)) continue;
+        departure_row_render(&g_rows[shown++], info);
     }
 
-    show_rows(n);
+    show_rows(shown);
     cJSON_Delete(root);
 }
 
@@ -559,7 +562,7 @@ static DepartureInfo make_dummy_departure(int offset_min, int delay_min,
     cJSON_AddStringToObject(dep, DEP_STATUS,       cancelled ? "c" : "p");
     cJSON_AddNumberToObject(dep, DEP_DELAY_MIN,    delay_min);
 
-    DepartureInfo info = parse_departure_info(dep);
+    DepartureInfo info = parse_departure_info(dep, CFG_I(DELAY_THRESHOLD_MIN));
     cJSON_Delete(dep);
     return info;
 }

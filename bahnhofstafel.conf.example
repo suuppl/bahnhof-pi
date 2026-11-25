@@ -12,6 +12,7 @@ STATION_NAME="Berlin Hbf"          # IRIS station name, looked up at startup
 #STATION_EVA_FALLBACK=0            # only if the lookup fails and nothing is cached
 #TRAIN_FILTER="S, RE8"             # type ("S"), line ("RE8") or train number ("4012")
 #DELAY_THRESHOLD_MIN=5             # smaller delays are shown as on time
+#DEPARTED_GRACE_S=60               # seconds a departed train stays on the board
 #SHOW_PLATFORM=1                   # 0 = hide the platform column (orange if changed)
 
 # ── Weather (Open-Meteo) ───────────────────────────────────────────────────

@@ -60,6 +60,7 @@ Compile-time **defaults**. Every setting except the IPC paths and array sizes is
 - `SHOW_PLATFORM` (1) — platform column at the right edge of each row; a changed platform (`changed_platform` ≠ `planned_platform`) is shown in orange, cancelled rows dimmed/struck through
 - `TRAIN_FILTER` ("") — optional comma/space list; only matching departures are written by `iris_fetch`: letters = train type (`S`, `RE`), digits = train number (`4012`), mixed = exact label (`S3`, `RE8`); case-insensitive. 
 - `DELAY_THRESHOLD_MIN` (5) — delays/early departures smaller than this are shown as on time (planned time, normal colour)
+- `DEPARTED_GRACE_S` (60) — seconds a departure stays on the board after its shown time
 
 **Limits**
 - `MAX_DEPARTURES` (120) — size of the in-memory departure array in `iris_fetch`
@@ -148,7 +149,7 @@ typedef struct {
 2. **Sort** — departures sorted ascending by `planned_ts`.
 3. **Full changes (`fchg`)** — fetched first; contains early-announced cancellations.
 4. **Recent changes (`rchg`)** — merged after `fchg` so newer data overrides for the same trip.
-5. **Write JSON** — filters hidden stops and entries more than 2 min past (3 min for cancelled).
+5. **Write JSON** — filters hidden stops and entries more than `DEPARTED_GRACE_S` (60 s) past their shown time (`departure_info_derive()`: planned, or changed if the delay is ≥ `DELAY_THRESHOLD_MIN`; planned for cancelled). The display applies the same rule on every re-render.
 
 ### Output JSON shape
 

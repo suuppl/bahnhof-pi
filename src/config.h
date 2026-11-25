@@ -37,6 +37,13 @@
 #define DELAY_THRESHOLD_MIN 5
 #endif
 
+/* [runtime] Seconds a departure stays on the board after its shown time
+ * (planned, or changed if the delay is shown) before it is dropped —
+ * by iris_fetch and, between fetches, by the display. Cancelled too. */
+#ifndef DEPARTED_GRACE_S
+#define DEPARTED_GRACE_S 60
+#endif
+
 /* [runtime] Show the platform at the right edge of each row (1/0); a
  * changed platform is shown in orange. */
 #ifndef SHOW_PLATFORM

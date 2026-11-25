@@ -147,3 +147,15 @@ if(BAHNHOF_PLUGIN_DIR)
         message(STATUS "bahnhofstafel: extra plugin ${_name}")
     endforeach()
 endif()
+
+# ── unit tests (native builds only): ctest --test-dir build-native ─────────
+# built into tests/ so the Docker image's /build/* binary copy (= plugins)
+# never picks them up
+if(NOT CROSS_LIB_DIR)
+    enable_testing()
+    add_executable(test_departure_info tests/test_departure_info.c src/departure_info.c)
+    target_include_directories(test_departure_info PRIVATE src ${INC_DIRS})
+    target_link_libraries(test_departure_info PRIVATE ${CJSON_LIB})
+    set_target_properties(test_departure_info PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
+    add_test(NAME departure_info COMMAND test_departure_info)
+endif()

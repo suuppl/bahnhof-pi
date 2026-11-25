@@ -61,6 +61,8 @@ Compile-time **defaults**. Every setting except the IPC paths and array sizes is
 - `TRAIN_FILTER` ("") — optional comma/space list; only matching departures are written by `iris_fetch`: letters = train type (`S`, `RE`), digits = train number (`4012`), mixed = exact label (`S3`, `RE8`); case-insensitive. 
 - `DELAY_THRESHOLD_MIN` (5) — delays/early departures smaller than this are shown as on time (planned time, normal colour)
 - `DEPARTED_GRACE_S` (60) — seconds a departure stays on the board after its shown time
+- `LINE_BADGE` (`auto`) — line badge placement: `auto` = in the header when only one line runs in the fetched window (~11 h, `single_line`), else per row; `header` = always in the header (`main_line`, other lines keep a per-row badge); `rows`
+- `DIR_MARKS` (`""`) — direction markers: `stop:emoji[:#rrggbb]`, comma separated; a train whose remaining route (`ppth`) contains `stop` (substring) gets the emoji, on a circle of that colour, in a column before the destination. First match wins. Example: `"Pasing:🏢:#2f5d8a, Olching:🐄:#b8860b"`
 
 **Limits**
 - `MAX_DEPARTURES` (120) — size of the in-memory departure array in `iris_fetch`
@@ -158,6 +160,8 @@ typedef struct {
   "fetched_at": 1750000000,
   "station": "Berlin Hbf",
   "eva": 8011160,
+  "main_line": "S1",
+  "single_line": "",
   "departures": [
     {
       "planned_time": "14:31",
@@ -167,13 +171,15 @@ typedef struct {
       "planned_platform": "2",
       "changed_platform": "",
       "delay_min": 0,
-      "status": "p"
+      "status": "p",
+      "mark": "🏢",
+      "mark_bg": "#2f5d8a"
     }
   ]
 }
 ```
 
-`status` values: `"p"` planned, `"c"` cancelled, `"a"` additional service.
+`status` values: `"p"` planned, `"c"` cancelled, `"a"` additional service. `mark`/`mark_bg` only when `DIR_MARKS` matches. `main_line` = most frequent line label among the candidate departures (whole fetched window), `single_line` = the same if it is the only one, else `""`.
 
 ---
 
@@ -310,11 +316,14 @@ Each row is a fixed-height (`ROW_H`, 129 px) LVGL flex-row container, content ve
 1. **`time_lbl`** (font_time, `COL_TIME`) — minutes until the shown time
 2. **`clock_lbl`** (font_clock, `COL_CLOCK`) — shown departure time (changed if delayed/early ≥ threshold, else planned)
 3. **`delay_lbl`** (font_delay, `C_DELAY`, `COL_DELAY`) — `(+N)` / `(-N)`, empty when shown as on time
-4. **train pill** (`COL_TRAIN` slot, fixed height) — label font shrinks (`pill_font()`: font_row → font_delay → font_col) so long labels fit
-5. **`dest_lbl`** (font_row, flex-grow) — scrolls if too long
-6. **`plat_lbl`** (font_row) — at least `COL_PLAT` wide, grows left instead of wrapping (e.g. `1 D - G`)
+4. **train pill** (`COL_TRAIN` slot, fixed height) — label font shrinks (`pill_font()`: font_row → font_delay → font_col) so long labels fit; slot hidden for rows of the line shown in the header (`LINE_BADGE`)
+5. **`mark_box`** (`MARK_D` circle, emoji `font_mark`) — direction marker (`DIR_MARKS`); column only while some departure has a marker
+6. **`dest_lbl`** (font_row, flex-grow) — scrolls if too long
+7. **`plat_lbl`** (font_row) — at least `COL_PLAT` wide, grows left instead of wrapping (e.g. `1 D - G`)
 
-Header: station name (left), date (centred, font_delay, `C_DIM`), clock (right, same font as the station name).
+The delay column (`delay_lbl`) is hidden in all rows while no visible row shows a delay (`apply_layout()`).
+
+Header: station name (left) with the line badge when `LINE_BADGE` puts it there, date (centred, font_delay, `C_DIM`), clock (right, same font as the station name).
 
 ### Plugin bar
 

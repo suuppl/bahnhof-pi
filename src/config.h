@@ -33,6 +33,22 @@
 
 /* [runtime] Minimum delay (minutes, early or late) before a departure is
  * shown as delayed; smaller deviations show as on time. */
+/* [runtime] Direction markers: an emoji (optionally on a coloured circle)
+ * in its own column before the destination, for trains whose remaining
+ * route contains a stop. Comma list of stop:emoji[:#rrggbb], first match
+ * wins; the stop matches as a substring ("Pasing" ~ "München-Pasing").
+ * "" = no marker column. Example: "Pasing:🏢:#4a6670, Olching:🐄:#8a7a4a" */
+#ifndef DIR_MARKS
+#define DIR_MARKS ""
+#endif
+
+/* [runtime] Line badge placement: "auto" = in the header when only one line
+ * runs in the fetched window (~11 h), else per row; "header" = always in the
+ * header (most frequent line; other lines keep a per-row badge); "rows". */
+#ifndef LINE_BADGE
+#define LINE_BADGE "auto"
+#endif
+
 #ifndef DELAY_THRESHOLD_MIN
 #define DELAY_THRESHOLD_MIN 5
 #endif

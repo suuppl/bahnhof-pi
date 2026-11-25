@@ -76,6 +76,20 @@ int main(void) {
         CHECK(r[2].planned_ts == T && r[3].planned_ts == T + 420);  /* tie at T+7: planned */
     }
 
+    /* direction markers (DIR_MARKS) */
+    {
+        const char *spec = "Pasing:\xf0\x9f\x8f\xa2:#4a6670, Olching:\xf0\x9f\x90\x84";
+        char e[16], bg[8];
+        CHECK(departure_mark_match(spec, "München-Lochhausen|München-Pasing|München Hbf", e, sizeof e, bg, sizeof bg));
+        CHECK(strcmp(e, "\xf0\x9f\x8f\xa2") == 0 && strcmp(bg, "#4a6670") == 0);
+        CHECK(departure_mark_match(spec, "Olching|Esting", e, sizeof e, bg, sizeof bg));
+        CHECK(strcmp(e, "\xf0\x9f\x90\x84") == 0 && bg[0] == '\0');   /* no colour given */
+        CHECK(!departure_mark_match(spec, "Dachau|Petershausen", e, sizeof e, bg, sizeof bg) && !e[0]);
+        CHECK(!departure_mark_match("", "Olching", e, sizeof e, bg, sizeof bg));
+        CHECK(!departure_mark_match("Pasing:x:#zz", "", e, sizeof e, bg, sizeof bg));
+        CHECK(departure_mark_match("Pasing:x:bad", "Pasing", e, sizeof e, bg, sizeof bg) && !bg[0]);
+    }
+
     if (!fails) puts("test_departure_info: all passed");
     return fails != 0;
 }

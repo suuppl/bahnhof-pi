@@ -34,6 +34,8 @@
 #define COL_CLOCK  225  /* absolute departure time (HH:MM) column (font_clock) */
 #define COL_DELAY  160  /* delay "(+N)" right of the time (font_delay), empty when on time */
 #define COL_TRAIN  220  /* fixed slot the (content-width) train pill is centered in */
+#define MARK_D     100  /* direction marker circle diameter */
+#define MARK_LIFT    7  /* px the marker emoji is moved up inside its circle */
 #define PILL_PAD_H  22  /* pill horizontal padding; long labels get a smaller font (pill_font) */
 #define COL_PLAT   170  /* platform column at the right edge (SHOW_PLATFORM) */
 
@@ -69,6 +71,7 @@ static lv_font_t *font_row;       /* 60px — departure rows */
 static lv_font_t *font_col;       /* 36px — column headers + planned time */
 static lv_font_t *font_time;      /* 96px — minutes until departure */
 static lv_font_t *font_clock;     /* 72px — departure time HH:MM */
+static lv_font_t *font_mark;      /* 60px emoji — direction marker */
 static lv_font_t *font_delay;     /* 52px — delay "(+N)", long train labels */
 static lv_font_t *font_wea;       /* 48px — weather ticker */
 static lv_font_t *font_emoji_wea; /* 48px — Noto Color Emoji, fallback for weather */
@@ -106,6 +109,7 @@ static char      g_bar_sig[2048];   /* layout signature of the built groups */
 static char      g_bar_files[1024]; /* "name:mtime;..." of the last scan */
 static void bar_poll_cb(lv_timer_t *t);
 static lv_font_t *pill_font(const char *text);
+static const char *json_str(const cJSON *obj, const char *key, const char *dflt);
 
 /* One departure row's LVGL widgets, plus the pair of functions that own it
  * (departure_row_create/departure_row_render, defined below) — used by both
@@ -117,11 +121,20 @@ typedef struct {
     lv_obj_t *time_lbl;
     lv_obj_t *clock_lbl;    /* absolute departure time "HH:MM" */
     lv_obj_t *delay_lbl;    /* delay "(+N)" / early "(-N)", empty when shown as on time */
+    lv_obj_t *clock_box;    /* time + delay */
+    lv_obj_t *train_col;    /* COL_TRAIN slot; hidden when the line is in the header */
     lv_obj_t *train_pill;   /* pill container around train_lbl */
     lv_obj_t *train_lbl;
+    lv_obj_t *mark_box;     /* direction marker circle (DIR_MARKS), hidden if unused */
+    lv_obj_t *mark_lbl;
     lv_obj_t *dest_lbl;
     lv_obj_t *plat_lbl;     /* platform, right column; hidden unless SHOW_PLATFORM */
 } DepartureRow;
+
+/* line shown as a badge in the header instead of per row ("" = per row);
+ * see apply_layout() and LINE_BADGE */
+static char      g_header_line[32];
+static lv_obj_t *g_hdr_pill, *g_hdr_pill_lbl;
 
 static DepartureRow g_rows[MAX_ROWS];
 
@@ -307,7 +320,23 @@ static void departure_row_render(DepartureRow *row, DepartureInfo info) {
     lv_obj_set_style_bg_color(row->train_pill, lv_color_hex(pill_bg), 0);
     lv_label_set_text(row->dest_lbl, info.destination[0] ? info.destination : "\xe2\x80\x93");
 
-    /* delay column: empty (but still taking its width) when on time */
+    /* line in the header: only rows of another line keep their badge */
+    if (g_header_line[0] && strcmp(info.train, g_header_line) == 0)
+        lv_obj_add_flag(row->train_col, LV_OBJ_FLAG_HIDDEN);
+    else
+        lv_obj_clear_flag(row->train_col, LV_OBJ_FLAG_HIDDEN);
+
+    /* direction marker: emoji on an optional coloured circle */
+    lv_label_set_text(row->mark_lbl, info.mark);
+    if (info.mark[0] && info.mark_bg[0] == '#') {
+        lv_obj_set_style_bg_color(row->mark_box, lv_color_hex((uint32_t)strtoul(info.mark_bg + 1, NULL, 16)), 0);
+        lv_obj_set_style_bg_opa(row->mark_box, info.cancelled ? LV_OPA_40 : LV_OPA_COVER, 0);
+    } else {
+        lv_obj_set_style_bg_opa(row->mark_box, LV_OPA_TRANSP, 0);
+    }
+
+    /* delay column: empty when on time; hidden in all rows (apply_layout)
+     * while no visible row has a shown delay */
     char delay_str[16] = "";
     if (show_delay)
         snprintf(delay_str, sizeof(delay_str), "(%+d)", info.delay_min);
@@ -336,10 +365,41 @@ static void departure_row_render(DepartureRow *row, DepartureInfo info) {
     lv_obj_set_style_text_decor(row->plat_lbl, decor, 0);
 }
 
+/* ── row layout (columns that come and go) ─────────────────────────────── */
+
+/* Header badge for `line` ("" = none, badges per row), delay column and
+ * direction-marker column on/off for all rows. Cheap when nothing changes. */
+static void apply_layout(const char *line, bool delay_col, bool mark_col) {
+    static int last_delay = -1, last_mark = -1;
+    if (strcmp(line, g_header_line) != 0) {
+        snprintf(g_header_line, sizeof(g_header_line), "%s", line);
+        if (line[0]) {
+            lv_label_set_text(g_hdr_pill_lbl, line);
+            set_text_color(g_hdr_pill_lbl, train_pill_text_color(line));
+            lv_obj_set_style_bg_color(g_hdr_pill, lv_color_hex(train_pill_color(line)), 0);
+            lv_obj_clear_flag(g_hdr_pill, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_update_layout(stn_lbl);
+            lv_obj_align_to(g_hdr_pill, stn_lbl, LV_ALIGN_OUT_RIGHT_MID, 30, 0);
+        } else {
+            lv_obj_add_flag(g_hdr_pill, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if ((int)delay_col != last_delay || (int)mark_col != last_mark) {
+        for (int i = 0; i < MAX_ROWS; i++) {
+            if (delay_col) lv_obj_clear_flag(g_rows[i].delay_lbl, LV_OBJ_FLAG_HIDDEN);
+            else           lv_obj_add_flag(g_rows[i].delay_lbl, LV_OBJ_FLAG_HIDDEN);
+            if (mark_col)  lv_obj_clear_flag(g_rows[i].mark_box, LV_OBJ_FLAG_HIDDEN);
+            else           lv_obj_add_flag(g_rows[i].mark_box, LV_OBJ_FLAG_HIDDEN);
+        }
+        last_delay = delay_col;
+        last_mark = mark_col;
+    }
+}
+
 /* ── departure update ───────────────────────────────────────────────────── */
 
-static void update_departures(const char *json_str) {
-    cJSON *root = cJSON_Parse(json_str);
+static void update_departures(const char *raw) {
+    cJSON *root = cJSON_Parse(raw);
     if (!root) return;
 
     cJSON *arr = cJSON_GetObjectItem(root, "departures");
@@ -348,20 +408,38 @@ static void update_departures(const char *json_str) {
     if (!g_has_real_data && n > 0) {
         g_has_real_data = 1;
         if (stn_lbl) lv_label_set_text(stn_lbl, CFG_S(STATION_NAME));
+        g_header_line[0] = '\0';   /* station width changed: re-place the header badge */
     }
 
     /* also drop departed rows here: iris_fetch rewrites the file only once
      * per fetch cycle (>60 s), the display re-renders every DEP_POLL_MS */
     time_t now = time(NULL);
     int grace = CFG_I(DEPARTED_GRACE_S), shown = 0;
+    static DepartureInfo infos[MAX_ROWS];
     cJSON *dep;
     cJSON_ArrayForEach(dep, arr) {
         if (shown >= MAX_ROWS) break;
         DepartureInfo info = parse_departure_info(dep, CFG_I(DELAY_THRESHOLD_MIN));
         if (departure_info_departed(&info, now, grace)) continue;
-        departure_row_render(&g_rows[shown++], info);
+        infos[shown++] = info;
     }
 
+    /* layout decisions: header badge (LINE_BADGE, from iris_fetch's view of
+     * the whole fetched window), delay column only while a visible row has a
+     * shown delay, marker column while any departure has a marker */
+    const char *mode = CFG_S(LINE_BADGE);
+    const char *line = "";
+    if (strcmp(mode, "header") == 0)    line = json_str(root, DEP_MAIN_LINE, "");
+    else if (strcmp(mode, "rows") != 0) line = json_str(root, DEP_SINGLE_LINE, "");
+    bool any_delay = false, any_mark = false;
+    for (int i = 0; i < shown; i++) {
+        if (i < g_max_rows && infos[i].show_delay) any_delay = true;
+        if (infos[i].mark[0]) any_mark = true;
+    }
+    apply_layout(line, any_delay, any_mark);
+
+    for (int i = 0; i < shown; i++)
+        departure_row_render(&g_rows[i], infos[i]);
     show_rows(shown);
     cJSON_Delete(root);
 }
@@ -501,8 +579,8 @@ static DepartureRow departure_row_create(lv_obj_t *parent, uint32_t bg_color) {
     /* absolute departure time (HH:MM) and, right next to it, the delay —
      * two fixed-width columns sharing one box so they sit closer together
      * than the row's column gap */
-    lv_obj_t *clock_box = lv_obj_create(r.row);
-    lv_obj_set_width(clock_box, COL_CLOCK + 16 + COL_DELAY);
+    lv_obj_t *clock_box = r.clock_box = lv_obj_create(r.row);
+    lv_obj_set_width(clock_box, LV_SIZE_CONTENT);   /* COL_CLOCK (+ 16 + COL_DELAY) */
     lv_obj_set_height(clock_box, LV_SIZE_CONTENT);
     lv_obj_set_layout(clock_box, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(clock_box, LV_FLEX_FLOW_ROW);
@@ -521,7 +599,7 @@ static DepartureRow departure_row_create(lv_obj_t *parent, uint32_t bg_color) {
 
     /* fixed-width slot so the destination column always starts at the
      * same x; the pill inside it still hugs the label width */
-    lv_obj_t *train_col = lv_obj_create(r.row);
+    lv_obj_t *train_col = r.train_col = lv_obj_create(r.row);
     lv_obj_remove_style_all(train_col);
     lv_obj_set_size(train_col, COL_TRAIN, LV_SIZE_CONTENT);
     lv_obj_set_layout(train_col, LV_LAYOUT_FLEX);
@@ -545,6 +623,17 @@ static DepartureRow departure_row_create(lv_obj_t *parent, uint32_t bg_color) {
     lv_obj_set_style_pad_ver(r.train_pill, 6, 0);
     lv_obj_set_scrollbar_mode(r.train_pill, LV_SCROLLBAR_MODE_OFF);
     r.train_lbl = make_label(r.train_pill, "", font_row, C_TEXT);
+
+    /* direction marker (DIR_MARKS): emoji centred on a circle */
+    r.mark_box = lv_obj_create(r.row);
+    lv_obj_remove_style_all(r.mark_box);
+    lv_obj_set_size(r.mark_box, MARK_D, MARK_D);
+    lv_obj_set_style_radius(r.mark_box, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_scrollbar_mode(r.mark_box, LV_SCROLLBAR_MODE_OFF);
+    r.mark_lbl = make_label(r.mark_box, "", font_mark, C_TEXT);
+    /* emoji glyphs sit low in their line box: lift them to the optical centre */
+    lv_obj_align(r.mark_lbl, LV_ALIGN_CENTER, 0, -MARK_LIFT);
+    lv_obj_add_flag(r.mark_box, LV_OBJ_FLAG_HIDDEN);
 
     /* destination: takes all remaining row space (also pushing the platform
      * to the right edge); scrolls horizontally if the text doesn't fit */
@@ -876,6 +965,8 @@ void display_init(void) {
     font_emoji_hdr  = lv_freetype_font_create(EMOJI_FONT_PATH, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 72, LV_FREETYPE_FONT_STYLE_NORMAL);
     font_emoji_icon = lv_freetype_font_create(EMOJI_FONT_PATH, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 130, LV_FREETYPE_FONT_STYLE_NORMAL);
     font_emoji_row  = lv_freetype_font_create(EMOJI_FONT_PATH, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 68, LV_FREETYPE_FONT_STYLE_NORMAL);
+    font_mark       = lv_freetype_font_create(EMOJI_FONT_PATH, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 60, LV_FREETYPE_FONT_STYLE_NORMAL);
+    if (!font_mark) font_mark = font_row;
     font_emoji_col  = lv_freetype_font_create(EMOJI_FONT_PATH, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 36, LV_FREETYPE_FONT_STYLE_NORMAL);
 
     if (font_emoji_wea) font_wea->fallback = font_emoji_wea;
@@ -908,6 +999,18 @@ void display_init(void) {
     lv_font_t *clock_font = font_hdr_bold ? font_hdr_bold : font_hdr;   /* station + clock */
     stn_lbl = make_label(hdr, "Null Island", clock_font, C_TEXT);
     lv_obj_align(stn_lbl, LV_ALIGN_LEFT_MID, 30, 0);
+
+    /* line badge right of the station name (LINE_BADGE), hidden by default */
+    g_hdr_pill = lv_obj_create(hdr);
+    lv_obj_remove_style_all(g_hdr_pill);
+    lv_obj_set_size(g_hdr_pill, LV_SIZE_CONTENT, lv_font_get_line_height(font_row) + 2 * 6);
+    lv_obj_set_layout(g_hdr_pill, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_align(g_hdr_pill, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_bg_opa(g_hdr_pill, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(g_hdr_pill, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_pad_hor(g_hdr_pill, PILL_PAD_H, 0);
+    g_hdr_pill_lbl = make_label(g_hdr_pill, "", font_row, C_TEXT);
+    lv_obj_add_flag(g_hdr_pill, LV_OBJ_FLAG_HIDDEN);
 
 
     /* date: centred in the header */

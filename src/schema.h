@@ -15,6 +15,11 @@
 #define DEP_DELAY_MIN     "delay_min"
 #define DEP_PLANNED_PLATFORM "planned_platform"
 #define DEP_CHANGED_PLATFORM "changed_platform"
+#define DEP_MARK          "mark"         /* direction emoji (DIR_MARKS), "" if none */
+#define DEP_MARK_BG       "mark_bg"      /* its circle colour "#rrggbb", "" = none */
+/* departures.json root */
+#define DEP_SINGLE_LINE   "single_line"  /* the only line in the fetched window, "" if several */
+#define DEP_MAIN_LINE     "main_line"    /* the most frequent line in the fetched window */
 
 /* bar.d/NN-name.json — bottom-bar plugin files, consumed by display (docs/plugins.md)
  * { "groups": [ { "emoji": "🌡", "value": "21°", "width": 170,

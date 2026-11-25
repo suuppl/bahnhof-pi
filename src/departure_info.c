@@ -37,6 +37,13 @@ void departure_info_derive(DepartureInfo *info, int delay_threshold_min) {
                        ? info->changed_ts : info->planned_ts;
 }
 
+int departure_info_cmp(const void *a, const void *b) {
+    const DepartureInfo *x = a, *y = b;
+    if (x->effective_ts != y->effective_ts) return x->effective_ts < y->effective_ts ? -1 : 1;
+    if (x->planned_ts != y->planned_ts)     return x->planned_ts < y->planned_ts ? -1 : 1;
+    return strcmp(x->destination, y->destination);
+}
+
 bool departure_info_departed(const DepartureInfo *info, time_t now, int grace_s) {
     return info->effective_ts > 0 && info->effective_ts + grace_s < (double)now;
 }

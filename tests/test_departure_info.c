@@ -1,6 +1,8 @@
 /* Unit tests for departure_info.c: which time the board shows and when a
  * departure counts as departed. Run: ctest --test-dir build-native */
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <cjson/cJSON.h>
 #include "departure_info.h"
 
@@ -58,6 +60,21 @@ int main(void) {
     DepartureInfo p = parse_departure_info(j, 5);
     cJSON_Delete(j);
     CHECK(p.show_delay && p.effective_ts == d.effective_ts);
+
+    /* board order: shown time, then planned time, then destination */
+    {
+        DepartureInfo r[4];
+        r[0] = dep(T, 7, 'p');         /* planned T, shown T+7 min */
+        r[1] = dep(T + 120, 0, 'p');   /* shown T+2 min */
+        r[2] = dep(T + 420, 0, 'p');   /* shown T+7 min, planned later than r[0] */
+        r[3] = dep(T + 120, 0, 'p');   /* same times as r[1] */
+        snprintf(r[1].destination, sizeof r[1].destination, "Zorneding");
+        snprintf(r[3].destination, sizeof r[3].destination, "Erding");
+        qsort(r, 4, sizeof r[0], departure_info_cmp);
+        CHECK(strcmp(r[0].destination, "Erding") == 0);     /* T+2, E < Z */
+        CHECK(strcmp(r[1].destination, "Zorneding") == 0);
+        CHECK(r[2].planned_ts == T && r[3].planned_ts == T + 420);  /* tie at T+7: planned */
+    }
 
     if (!fails) puts("test_departure_info: all passed");
     return fails != 0;

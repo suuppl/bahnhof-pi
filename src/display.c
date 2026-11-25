@@ -27,9 +27,14 @@
 
 #define HDR_BAR_H 132
 
-#define COL_TIME   130
-#define COL_CLOCK  150  /* absolute departure time (HH:MM) column */
-#define COL_TRAIN  300  /* fixed slot the (content-width) train pill is centered in */
+/* departure row height: header(132) + BAR_H + 7 rows fit 1200 px; 8 rows without bar plugins */
+#define ROW_H      129
+
+#define COL_TIME   180  /* minutes until departure (font_time) */
+#define COL_CLOCK  225  /* absolute departure time (HH:MM) column (font_clock) */
+#define COL_DELAY  160  /* delay "(+N)" right of the time (font_delay), empty when on time */
+#define COL_TRAIN  220  /* fixed slot the (content-width) train pill is centered in */
+#define PILL_PAD_H  22  /* pill horizontal padding; long labels get a smaller font (pill_font) */
 #define COL_PLAT   170  /* platform column at the right edge (SHOW_PLATFORM) */
 
 /* weather grid — taller than the header to fit temp/UV/rain stacked in two
@@ -58,10 +63,13 @@
 
 /* ── fonts (created once, kept alive forever) ───────────────────────────── */
 
-static lv_font_t *font_hdr;       /* 72px — clock */
+static lv_font_t *font_hdr;       /* 72px — bar values */
 static lv_font_t *font_hdr_bold;  /* 72px bold — station name */
 static lv_font_t *font_row;       /* 60px — departure rows */
 static lv_font_t *font_col;       /* 36px — column headers + planned time */
+static lv_font_t *font_time;      /* 96px — minutes until departure */
+static lv_font_t *font_clock;     /* 72px — departure time HH:MM */
+static lv_font_t *font_delay;     /* 52px — delay "(+N)", long train labels */
 static lv_font_t *font_wea;       /* 48px — weather ticker */
 static lv_font_t *font_emoji_wea; /* 48px — Noto Color Emoji, fallback for weather */
 static lv_font_t *font_emoji_hdr; /* 72px — Noto Color Emoji, fallback for header */
@@ -97,6 +105,7 @@ static int       g_bar_n = -1;
 static char      g_bar_sig[2048];   /* layout signature of the built groups */
 static char      g_bar_files[1024]; /* "name:mtime;..." of the last scan */
 static void bar_poll_cb(lv_timer_t *t);
+static lv_font_t *pill_font(const char *text);
 
 /* One departure row's LVGL widgets, plus the pair of functions that own it
  * (departure_row_create/departure_row_render, defined below) — used by both
@@ -107,7 +116,7 @@ typedef struct {
     lv_obj_t *time_box;     /* flex-column, COL_TIME wide */
     lv_obj_t *time_lbl;
     lv_obj_t *clock_lbl;    /* absolute departure time "HH:MM" */
-    lv_obj_t *planned_lbl;  /* planned time "(HH:MM)", hidden when on-time */
+    lv_obj_t *delay_lbl;    /* delay "(+N)" / early "(-N)", empty when shown as on time */
     lv_obj_t *train_pill;   /* pill container around train_lbl */
     lv_obj_t *train_lbl;
     lv_obj_t *dest_lbl;
@@ -117,7 +126,12 @@ typedef struct {
 static DepartureRow g_rows[MAX_ROWS];
 
 static int g_row_count = 0;
+static int g_rows_wanted = 0;       /* rows with data, before the g_max_rows cap */
 static int g_max_rows  = MAX_ROWS;  /* capped after layout to whole rows only */
+static lv_obj_t *g_list;            /* departure list (flex-grows) */
+static lv_obj_t *g_hdr;             /* header bar */
+static lv_obj_t *g_bar_obj;         /* bottom bar: fills the space below the last whole row */
+static int       g_bar_groups = -1; /* bar has plugin groups (1/0), -1 = not yet known */
 static int g_has_real_data    = 0;
 static int g_screen_on        = -1;   /* -1 = unknown, 0 = blanked, 1 = on */
 
@@ -144,6 +158,7 @@ static void set_bg_color(lv_obj_t *obj, uint32_t hex) {
 /* ── row visibility ─────────────────────────────────────────────────────── */
 
 static void show_rows(int n) {
+    g_rows_wanted = n;
     if (n > g_max_rows) n = g_max_rows;
     for (int i = 0; i < MAX_ROWS; i++)
         lv_obj_set_style_opa(g_rows[i].row, i < n ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
@@ -284,22 +299,19 @@ static void departure_row_render(DepartureRow *row, DepartureInfo info) {
 
     lv_label_set_text(row->time_lbl, time_str);
     lv_label_set_text(row->clock_lbl, clock_str);
-    lv_label_set_text(row->train_lbl, info.train[0] ? info.train : "?");
+    const char *train = info.train[0] ? info.train : "?";
+    lv_label_set_text(row->train_lbl, train);
+    lv_obj_set_style_text_font(row->train_lbl, pill_font(train), 0);
     set_text_color(row->train_lbl, info.cancelled ? C_TEXT : train_pill_text_color(info.train));
     uint32_t pill_bg = info.cancelled ? C_HEADER : train_pill_color(info.train);
     lv_obj_set_style_bg_color(row->train_pill, lv_color_hex(pill_bg), 0);
     lv_label_set_text(row->dest_lbl, info.destination[0] ? info.destination : "\xe2\x80\x93");
 
-    if (show_delay && info.planned_time[0]) {
-        char plan_str[32];
-        snprintf(plan_str, sizeof(plan_str), "(%s)", info.planned_time);
-        lv_label_set_text(row->planned_lbl, plan_str);
-        lv_obj_clear_flag(row->planned_lbl, LV_OBJ_FLAG_HIDDEN);
-    } else {
-        /* hidden (not just transparent) so it's excluded from clock_box's
-         * layout, letting the clock time center vertically on its own */
-        lv_obj_add_flag(row->planned_lbl, LV_OBJ_FLAG_HIDDEN);
-    }
+    /* delay column: empty (but still taking its width) when on time */
+    char delay_str[16] = "";
+    if (show_delay)
+        snprintf(delay_str, sizeof(delay_str), "(%+d)", info.delay_min);
+    lv_label_set_text(row->delay_lbl, delay_str);
 
     /* cancelled: grey out + strike through time/destination (pill background
      * turns grey too, but its white text is never struck through or recolored);
@@ -438,11 +450,11 @@ static lv_obj_t *make_value_label(lv_obj_t *parent, const char *text,
 static lv_obj_t *make_row(lv_obj_t *parent, uint32_t bg_color) {
     lv_obj_t *row = lv_obj_create(parent);
     lv_obj_set_width(row, LV_PCT(100));
-    lv_obj_set_height(row, LV_SIZE_CONTENT);
+    lv_obj_set_height(row, ROW_H);   /* fixed: content is centred, no vertical padding */
     lv_obj_set_layout(row, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_ver(row, 19, 0);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_ver(row, 0, 0);
     lv_obj_set_style_pad_hor(row, 30, 0);
     lv_obj_set_style_pad_column(row, 80, 0);
     lv_obj_set_style_border_width(row, 0, 0);
@@ -450,6 +462,18 @@ static lv_obj_t *make_row(lv_obj_t *parent, uint32_t bg_color) {
     set_bg_color(row, bg_color);
     lv_obj_set_scrollbar_mode(row, LV_SCROLLBAR_MODE_OFF);
     return row;
+}
+
+/* Largest row font in which the train label still fits the COL_TRAIN slot
+ * (e.g. "S1" stays big, "ICE1005" shrinks) so long labels never get clipped. */
+static lv_font_t *pill_font(const char *text) {
+    lv_font_t *fonts[] = { font_row, font_delay, font_col };
+    for (int i = 0; i < 2; i++) {
+        lv_point_t sz;
+        lv_text_get_size(&sz, text, fonts[i], 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        if (sz.x <= COL_TRAIN - 2 * PILL_PAD_H) return fonts[i];
+    }
+    return fonts[2];
 }
 
 /* Build one departure row's widget tree. Hidden (transparent) until data
@@ -472,26 +496,28 @@ static DepartureRow departure_row_create(lv_obj_t *parent, uint32_t bg_color) {
     lv_obj_set_style_bg_opa(r.time_box, LV_OPA_TRANSP, 0);
     lv_obj_set_scrollbar_mode(r.time_box, LV_SCROLLBAR_MODE_OFF);
 
-    r.time_lbl = make_label(r.time_box, "", font_row, C_TEXT);
+    r.time_lbl = make_label(r.time_box, "", font_time, C_TEXT);
 
-    /* absolute departure time (HH:MM), fixed width, centered; the original
-     * planned time sits below it (in parens) when the train is off-schedule */
+    /* absolute departure time (HH:MM) and, right next to it, the delay —
+     * two fixed-width columns sharing one box so they sit closer together
+     * than the row's column gap */
     lv_obj_t *clock_box = lv_obj_create(r.row);
-    lv_obj_set_width(clock_box, COL_CLOCK);
+    lv_obj_set_width(clock_box, COL_CLOCK + 16 + COL_DELAY);
     lv_obj_set_height(clock_box, LV_SIZE_CONTENT);
     lv_obj_set_layout(clock_box, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(clock_box, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_flow(clock_box, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(clock_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_all(clock_box, 0, 0);
-    lv_obj_set_style_pad_row(clock_box, 2, 0);
+    lv_obj_set_style_pad_column(clock_box, 16, 0);
     lv_obj_set_style_border_width(clock_box, 0, 0);
     lv_obj_set_style_radius(clock_box, 0, 0);
     lv_obj_set_style_bg_opa(clock_box, LV_OPA_TRANSP, 0);
     lv_obj_set_scrollbar_mode(clock_box, LV_SCROLLBAR_MODE_OFF);
 
-    r.clock_lbl = make_label(clock_box, "", font_col, C_TEXT);
-    r.planned_lbl = make_label(clock_box, "", font_col, C_DIM);
-    lv_obj_add_flag(r.planned_lbl, LV_OBJ_FLAG_HIDDEN);
+    r.clock_lbl = make_label(clock_box, "", font_clock, C_TEXT);
+    lv_obj_set_width(r.clock_lbl, COL_CLOCK);
+    r.delay_lbl = make_label(clock_box, "", font_delay, C_DELAY);   /* centred on the time (cross-axis CENTER) */
+    lv_obj_set_width(r.delay_lbl, COL_DELAY);
 
     /* fixed-width slot so the destination column always starts at the
      * same x; the pill inside it still hugs the label width */
@@ -506,19 +532,21 @@ static DepartureRow departure_row_create(lv_obj_t *parent, uint32_t bg_color) {
     /* pill badge for line identifier (S1, RE1, …); hugs the label width */
     r.train_pill = lv_obj_create(train_col);
     lv_obj_remove_style_all(r.train_pill);
-    lv_obj_set_size(r.train_pill, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    /* fixed height (that of a full-size label), so pills with a shrunk
+     * label font (pill_font) stay the same size; the label is centred */
+    lv_obj_set_size(r.train_pill, LV_SIZE_CONTENT, lv_font_get_line_height(font_row) + 2 * 6);
     lv_obj_set_layout(r.train_pill, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(r.train_pill, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(r.train_pill, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_bg_opa(r.train_pill, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_color(r.train_pill, lv_color_hex(C_HEADER), 0);
     lv_obj_set_style_radius(r.train_pill, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_pad_hor(r.train_pill, 22, 0);
+    lv_obj_set_style_pad_hor(r.train_pill, PILL_PAD_H, 0);
     lv_obj_set_style_pad_ver(r.train_pill, 6, 0);
     lv_obj_set_scrollbar_mode(r.train_pill, LV_SCROLLBAR_MODE_OFF);
     r.train_lbl = make_label(r.train_pill, "", font_row, C_TEXT);
 
-    /* destination: takes all remaining row space (also pushing planned_lbl
+    /* destination: takes all remaining row space (also pushing the platform
      * to the right edge); scrolls horizontally if the text doesn't fit */
     r.dest_lbl = make_label(r.row, "", font_row, C_TEXT);
     lv_obj_set_flex_grow(r.dest_lbl, 1);
@@ -527,7 +555,10 @@ static DepartureRow departure_row_create(lv_obj_t *parent, uint32_t bg_color) {
 
     /* platform: fixed-width right column, right-aligned */
     r.plat_lbl = make_label(r.row, "", font_row, C_TEXT);
-    lv_obj_set_width(r.plat_lbl, COL_PLAT);
+    /* at least COL_PLAT wide, but grows to the left (taking room from the
+     * destination in that row only) instead of wrapping, e.g. "1 D - G" */
+    lv_obj_set_width(r.plat_lbl, LV_SIZE_CONTENT);
+    lv_obj_set_style_min_width(r.plat_lbl, COL_PLAT, 0);
     lv_obj_set_style_text_align(r.plat_lbl, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_set_style_pad_right(r.plat_lbl, 30, 0);
     if (!CFG_I(SHOW_PLATFORM)) lv_obj_add_flag(r.plat_lbl, LV_OBJ_FLAG_HIDDEN);
@@ -674,12 +705,37 @@ static lv_obj_t *make_bar_icon(lv_obj_t *parent, lv_obj_t **outer_out) {
     return make_label(wrap, "", f, C_TEXT);
 }
 
+/* Split the space below the header: as many whole rows as fit while the
+ * bottom bar keeps at least BAR_H (0 without plugin groups), the list
+ * exactly that tall, and the bar (flex-grow) filling the rest down to the
+ * screen edge. Re-run when the bar gains or loses its groups. */
+static void update_max_rows(void) {
+    lv_obj_update_layout(lv_screen_active());
+    int32_t space = lv_obj_get_content_height(lv_screen_active()) - lv_obj_get_height(g_hdr);
+    int32_t row_h = lv_obj_get_height(g_rows[0].row);
+    int32_t bar_min = g_bar_groups > 0 ? BAR_H : 0;
+    if (row_h > 0) {
+        g_max_rows = (int)((space - bar_min) / row_h);
+        if (g_max_rows > MAX_ROWS) g_max_rows = MAX_ROWS;
+        if (g_max_rows < 1)        g_max_rows = 1;
+        lv_obj_set_height(g_list, g_max_rows * row_h);
+    }
+    show_rows(g_rows_wanted);
+}
+
 /* Render the combined "groups" array of all plugin files. The widgets are
  * rebuilt only when the layout (kind/emoji/arrows/widths/alignment/counts)
  * changes; otherwise just texts and opacity are updated. */
 static void update_bar(const cJSON *groups) {
     int n = cJSON_IsArray(groups) ? cJSON_GetArraySize(groups) : 0;
     if (n > BAR_MAX_GROUPS) n = BAR_MAX_GROUPS;
+
+    /* no plugin groups: the bar shrinks to the leftover strip, giving the
+     * list room for more rows; back to >= BAR_H when a plugin writes */
+    if ((n > 0) != g_bar_groups) {
+        g_bar_groups = n > 0;
+        update_max_rows();
+    }
 
     char sig[sizeof(g_bar_sig)] = "";
     size_t len = 0;
@@ -802,12 +858,18 @@ void display_init(void) {
     font_hdr_bold = lv_freetype_font_create(CFG_S(FONT_BOLD_PATH), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 72, LV_FREETYPE_FONT_STYLE_NORMAL);
     font_row = lv_freetype_font_create(CFG_S(FONT_PATH), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 68, LV_FREETYPE_FONT_STYLE_NORMAL);
     font_col = lv_freetype_font_create(CFG_S(FONT_PATH), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 36, LV_FREETYPE_FONT_STYLE_NORMAL);
+    font_time  = lv_freetype_font_create(CFG_S(FONT_PATH), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 96, LV_FREETYPE_FONT_STYLE_NORMAL);
+    font_clock = lv_freetype_font_create(CFG_S(FONT_PATH), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 72, LV_FREETYPE_FONT_STYLE_NORMAL);
+    font_delay = lv_freetype_font_create(CFG_S(FONT_PATH), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 52, LV_FREETYPE_FONT_STYLE_NORMAL);
     font_wea = lv_freetype_font_create(CFG_S(FONT_PATH), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 64, LV_FREETYPE_FONT_STYLE_NORMAL);
 
     if (!font_hdr || !font_row || !font_col || !font_wea) {
         fprintf(stderr, "display: failed to load font from %s\n", CFG_S(FONT_PATH));
         font_hdr = font_row = font_col = font_wea = (lv_font_t *)&lv_font_montserrat_16;
     }
+    if (!font_time)  font_time  = font_row;
+    if (!font_clock) font_clock = font_row;
+    if (!font_delay) font_delay = font_col;
 
     /* Color emoji fallback fonts — one per text size so fallback chain metrics match */
     font_emoji_wea  = lv_freetype_font_create(EMOJI_FONT_PATH, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 64, LV_FREETYPE_FONT_STYLE_NORMAL);
@@ -834,7 +896,7 @@ void display_init(void) {
     lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
 
     /* ── header row (absolute positioning — no flex reflow on clock update) */
-    lv_obj_t *hdr = lv_obj_create(scr);
+    lv_obj_t *hdr = g_hdr = lv_obj_create(scr);
     lv_obj_set_width(hdr, LV_PCT(100));
     lv_obj_set_height(hdr, HDR_BAR_H);
     lv_obj_set_style_border_width(hdr, 0, 0);
@@ -843,25 +905,29 @@ void display_init(void) {
     lv_obj_set_scrollbar_mode(hdr, LV_SCROLLBAR_MODE_OFF);
     set_bg_color(hdr, C_HEADER);
 
-    stn_lbl = make_label(hdr, "Null Island", font_hdr_bold ? font_hdr_bold : font_hdr, C_TEXT);
+    lv_font_t *clock_font = font_hdr_bold ? font_hdr_bold : font_hdr;   /* station + clock */
+    stn_lbl = make_label(hdr, "Null Island", clock_font, C_TEXT);
     lv_obj_align(stn_lbl, LV_ALIGN_LEFT_MID, 30, 0);
 
 
-    /* right-side date+time stack — flex-column, right-aligned */
+    /* date: centred in the header */
+    date_lbl = make_label(hdr, "00.00.0000", font_delay, C_DIM);
+    lv_obj_align(date_lbl, LV_ALIGN_CENTER, 0, 0);
+
+    /* right side: the clock, same font as the station name */
     lv_obj_t *hdr_right = lv_obj_create(hdr);
     lv_obj_set_size(hdr_right, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_layout(hdr_right, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(hdr_right, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(hdr_right, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_END);
+    lv_obj_set_flex_flow(hdr_right, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(hdr_right, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_END);
     lv_obj_set_style_pad_all(hdr_right, 0, 0);
-    lv_obj_set_style_pad_row(hdr_right, 0, 0);
+    lv_obj_set_style_pad_column(hdr_right, 0, 0);
     lv_obj_set_style_border_width(hdr_right, 0, 0);
     lv_obj_set_style_radius(hdr_right, 0, 0);
     lv_obj_set_style_bg_opa(hdr_right, LV_OPA_TRANSP, 0);
     lv_obj_set_scrollbar_mode(hdr_right, LV_SCROLLBAR_MODE_OFF);
     lv_obj_align(hdr_right, LV_ALIGN_RIGHT_MID, -30, 0);
 
-    date_lbl = make_label(hdr_right, "00.00.0000", font_col, C_DIM);
 
     /* Time row: three fixed labels so the hours position never shifts */
     lv_obj_t *time_row = lv_obj_create(hdr_right);
@@ -875,14 +941,13 @@ void display_init(void) {
     lv_obj_set_style_radius(time_row, 0, 0);
     lv_obj_set_style_bg_opa(time_row, LV_OPA_TRANSP, 0);
     lv_obj_set_scrollbar_mode(time_row, LV_SCROLLBAR_MODE_OFF);
-    hours_lbl = make_label(time_row, "00",  font_hdr, C_TEXT);
-    colon_lbl = make_label(time_row, ":",   font_hdr, C_TEXT);
-    min_lbl   = make_label(time_row, "00",  font_hdr, C_TEXT);
+    hours_lbl = make_label(time_row, "00",  clock_font, C_TEXT);
+    colon_lbl = make_label(time_row, ":",   clock_font, C_TEXT);
+    min_lbl   = make_label(time_row, "00",  clock_font, C_TEXT);
 
     /* ── departure list container ──────────────────────────────────────── */
-    lv_obj_t *list = lv_obj_create(scr);
-    lv_obj_set_width(list, LV_PCT(100));
-    lv_obj_set_flex_grow(list, 1);
+    lv_obj_t *list = g_list = lv_obj_create(scr);
+    lv_obj_set_width(list, LV_PCT(100));   /* height: update_max_rows() */
     lv_obj_set_layout(list, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(list, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
@@ -900,9 +965,9 @@ void display_init(void) {
     }
 
     /* ── bottom bar: plugin groups, left box grows, right box hugs the edge ── */
-    lv_obj_t *wea_bar = lv_obj_create(scr);
+    lv_obj_t *wea_bar = g_bar_obj = lv_obj_create(scr);
     lv_obj_set_width(wea_bar, LV_PCT(100));
-    lv_obj_set_height(wea_bar, BAR_H);
+    lv_obj_set_flex_grow(wea_bar, 1);   /* rest of the screen below the list */
     lv_obj_set_layout(wea_bar, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(wea_bar, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(wea_bar, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -931,9 +996,6 @@ void display_init(void) {
         if (side == 0) g_bar_left = box; else g_bar_right = box;
     }
 
-    /* make one row visible so its height can be measured */
-    lv_obj_set_style_opa(g_rows[0].row, LV_OPA_COVER, 0);
-    g_row_count = 1;
 
     /* ── LVGL timers ───────────────────────────────────────────────────── */
     lv_timer_create(clock_cb,        1000,             NULL);
@@ -941,19 +1003,7 @@ void display_init(void) {
     lv_timer_create(bar_poll_cb,     CFG_I(BAR_POLL_MS),      NULL);
     lv_timer_create(screen_poll_cb,  1000,             NULL);
 
-    /* Compute how many complete rows fit in the list area.
-     * Force a layout pass so heights are resolved, then divide available
-     * content height by the actual (undecorated) row height. */
-    lv_obj_update_layout(scr);
-    {
-        int32_t avail  = lv_obj_get_content_height(list);
-        int32_t row_h  = lv_obj_get_height(g_rows[0].row);
-        if (row_h > 0) {
-            g_max_rows = (int)(avail / row_h);
-            if (g_max_rows > MAX_ROWS) g_max_rows = MAX_ROWS;
-            if (g_max_rows < 1)        g_max_rows = 1;
-        }
-    }
+    update_max_rows();
 
     /* fill dummy data now that g_max_rows is known */
     load_line_colors();

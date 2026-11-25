@@ -149,7 +149,7 @@ typedef struct {
 2. **Sort** — departures sorted ascending by `planned_ts`.
 3. **Full changes (`fchg`)** — fetched first; contains early-announced cancellations.
 4. **Recent changes (`rchg`)** — merged after `fchg` so newer data overrides for the same trip.
-5. **Write JSON** — filters hidden stops and entries more than `DEPARTED_GRACE_S` (60 s) past their shown time (`departure_info_derive()`: planned, or changed if the delay is ≥ `DELAY_THRESHOLD_MIN`; planned for cancelled). The display applies the same rule on every re-render.
+5. **Write JSON** — filters hidden stops and entries more than `DEPARTED_GRACE_S` (60 s) past their shown time (`departure_info_derive()`: planned, or changed if the delay is ≥ `DELAY_THRESHOLD_MIN`; planned for cancelled), sorts by shown time → planned time → destination (`departure_info_cmp()`) and writes the first `MAX_ROWS`. The display applies the same departed rule on every re-render.
 
 ### Output JSON shape
 
@@ -279,10 +279,13 @@ Text uses DejaVu Sans (regular and bold) loaded via FreeType at runtime from `/u
 
 | Variable | Size | Used for |
 |----------|------|---------|
-| `font_hdr` | 72 px | Header clock, bar main values |
-| `font_hdr_bold` | 72 px bold | Station name in header |
-| `font_row` | 68 px | Departure rows |
-| `font_col` | 36 px | Column headers, sub-labels (min/max, UV max) |
+| `font_hdr` | 72 px | Bar main values |
+| `font_hdr_bold` | 72 px bold | Station name and clock in header |
+| `font_row` | 68 px | Destination, platform, train pill |
+| `font_time` | 96 px | Minutes until departure |
+| `font_clock` | 72 px | Departure time HH:MM |
+| `font_delay` | 52 px | Delay `(+N)`, header date, long train labels |
+| `font_col` | 36 px | Sub-labels (min/max, UV max), longest train labels |
 | `font_wea` | 64 px | (legacy; superseded by `font_hdr` in the bar) |
 
 Falls back to `lv_font_montserrat_16` if TTF files cannot be opened.
@@ -302,17 +305,20 @@ Falls back to `lv_font_montserrat_16` if TTF files cannot be opened.
 
 ### Departure row layout
 
-Each row is an LVGL flex-row container. Children left-to-right:
+Each row is a fixed-height (`ROW_H`, 129 px) LVGL flex-row container, content vertically centred. Children left-to-right:
 
-1. **`time_lbl`** (font_row) — changed time if delayed/early, otherwise planned time
-2. **`train_lbl`** (font_row)
-3. **`dest_lbl`** (font_row)
-4. **spacer** (flex-grow 1)
-5. **`planned_lbl`** (font_col, `C_DIM`) — shows `(HH:MM)` when delayed/early, hidden otherwise
+1. **`time_lbl`** (font_time, `COL_TIME`) — minutes until the shown time
+2. **`clock_lbl`** (font_clock, `COL_CLOCK`) — shown departure time (changed if delayed/early ≥ threshold, else planned)
+3. **`delay_lbl`** (font_delay, `C_DELAY`, `COL_DELAY`) — `(+N)` / `(-N)`, empty when shown as on time
+4. **train pill** (`COL_TRAIN` slot, fixed height) — label font shrinks (`pill_font()`: font_row → font_delay → font_col) so long labels fit
+5. **`dest_lbl`** (font_row, flex-grow) — scrolls if too long
+6. **`plat_lbl`** (font_row) — at least `COL_PLAT` wide, grows left instead of wrapping (e.g. `1 D - G`)
+
+Header: station name (left), date (centred, font_delay, `C_DIM`), clock (right, same font as the station name).
 
 ### Plugin bar
 
-Fixed 163 px strip at the bottom, built entirely from plugin files in `BAR_DIR` (`/run/bahnhofstafel/bar.d/*.json`, read in filename order — see [`plugins.md`](plugins.md)). Two flex-row boxes: a left box (flex-grow) and a right box hugging the edge; groups with `"align": "right"` go into the right one. Group shapes:
+Strip at the bottom that fills the space below the last whole departure row: at least `BAR_H` (163 px) while plugins write groups, otherwise just the leftover strip (one more row fits). Built entirely from plugin files in `BAR_DIR` (`/run/bahnhofstafel/bar.d/*.json`, read in filename order — see [`plugins.md`](plugins.md)). Two flex-row boxes: a left box (flex-grow) and a right box hugging the edge; groups with `"align": "right"` go into the right one. Group shapes:
 
 | Group | Structure |
 |-------|-----------|

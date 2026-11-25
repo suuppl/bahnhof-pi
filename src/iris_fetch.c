@@ -368,19 +368,24 @@ static void write_departures(void) {
 
     cJSON *arr = cJSON_AddArrayToObject(root, "departures");
 
-    int written = 0;
-    for (int i = 0; i < g_dep_count && written < MAX_ROWS; i++) {
+    /* candidates: skip hidden stops, departures more than DEPARTED_GRACE_S
+     * past the time the board shows (same rule as display.c) and filtered
+     * trains; then sort by the shown time (departure_info_cmp) and keep the
+     * first MAX_ROWS — a train planned earlier but delayed moves down */
+    DepartureInfo *rows = malloc(sizeof(*rows) * (g_dep_count ? g_dep_count : 1));
+    int n = 0;
+    for (int i = 0; rows && i < g_dep_count; i++) {
         Departure *d = &g_deps[i];
-
-        /* skip hidden stops and departures more than DEPARTED_GRACE_S past
-         * the time the board shows (same rule as display.c) */
         if (d->hidden) continue;
         DepartureInfo info = departure_to_info(d);
         if (departure_info_departed(&info, now, CFG_I(DEPARTED_GRACE_S))) continue;
         if (!train_matches_filter(d, info.train)) continue;
-        cJSON_AddItemToArray(arr, serialize_departure_info(&info));
-        written++;
+        rows[n++] = info;
     }
+    qsort(rows, n, sizeof(*rows), departure_info_cmp);
+    for (int i = 0; i < n && i < MAX_ROWS; i++)
+        cJSON_AddItemToArray(arr, serialize_departure_info(&rows[i]));
+    free(rows);
 
     char *json_str = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);

@@ -40,6 +40,10 @@ typedef struct {
  * time — the same time producer (filter) and display (countdown) use. */
 void departure_info_derive(DepartureInfo *info, int delay_threshold_min);
 
+/* Board order (qsort comparator on DepartureInfo): effective_ts, then
+ * planned_ts, then destination (byte order). */
+int departure_info_cmp(const void *a, const void *b);
+
 /* True once the shown time is more than grace_s seconds in the past. */
 bool departure_info_departed(const DepartureInfo *info, time_t now, int grace_s);
 

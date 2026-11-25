@@ -310,6 +310,7 @@ static DepartureInfo departure_to_info(const Departure *d) {
     snprintf(info.changed_platform, sizeof(info.changed_platform), "%s", d->changed_platform);
     info.status = d->status;
     info.delay_min = d->delay_min;
+    departure_info_derive(&info, CFG_I(DELAY_THRESHOLD_MIN));
 
     return info;
 }
@@ -371,12 +372,11 @@ static void write_departures(void) {
     for (int i = 0; i < g_dep_count && written < MAX_ROWS; i++) {
         Departure *d = &g_deps[i];
 
-        /* skip hidden stops and past departures */
-        time_t eff = d->changed_ts > 0 ? d->changed_ts : d->planned_ts;
-        int grace = (d->status == 'c') ? 180 : 120;  /* cancelled: 3min past planned, others: 2min past effective */
-        if (d->hidden || eff < now - grace) continue;
-
+        /* skip hidden stops and departures more than DEPARTED_GRACE_S past
+         * the time the board shows (same rule as display.c) */
+        if (d->hidden) continue;
         DepartureInfo info = departure_to_info(d);
+        if (departure_info_departed(&info, now, CFG_I(DEPARTED_GRACE_S))) continue;
         if (!train_matches_filter(d, info.train)) continue;
         cJSON_AddItemToArray(arr, serialize_departure_info(&info));
         written++;
